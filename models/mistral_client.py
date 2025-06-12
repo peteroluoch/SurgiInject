@@ -111,7 +111,7 @@ class MistralClient:
     
     def _mock_response(self, prompt: str) -> str:
         """
-        Generate a mock response for testing purposes.
+        Generate a sophisticated mock response for testing purposes.
         
         Args:
             prompt (str): Input prompt
@@ -121,55 +121,60 @@ class MistralClient:
         """
         logger.info("Generating mock response...")
         
-        # Extract source code from prompt
-        code_match = re.search(r'```(?:\w+)?\n(.*?)```', prompt, re.DOTALL)
+        # Extract source code from prompt - improved extraction
+        code_match = re.search(r'```(?:\w+)?\s*\n(.*?)```', prompt, re.DOTALL)
         if code_match:
-            source_code = code_match.group(1)
+            source_code = code_match.group(1).strip()
         else:
-            # Fallback: look for code after "SOURCE CODE:"
-            lines = prompt.split('\n')
-            code_start = -1
-            for i, line in enumerate(lines):
-                if 'SOURCE CODE:' in line:
-                    code_start = i + 1
-                    break
-            
-            if code_start >= 0:
-                # Take lines after SOURCE CODE until we hit INSTRUCTION
-                code_lines = []
-                for i in range(code_start, len(lines)):
-                    if 'INSTRUCTION:' in lines[i]:
-                        break
-                    code_lines.append(lines[i])
-                source_code = '\n'.join(code_lines).strip()
+            # Look for CONTEXT section in Phase 3 format
+            context_match = re.search(r'💬 CONTEXT:\s*\n(.*?)(?:\n🚀 INSTRUCTION:|$)', prompt, re.DOTALL)
+            if context_match:
+                source_code = context_match.group(1).strip()
             else:
-                # If we can't parse the code, return the original with a comment
-                source_code = "# Original code could not be parsed\npass"
+                # Fallback extraction
+                lines = prompt.split('\n')
+                code_lines = []
+                in_code_section = False
+                
+                for line in lines:
+                    if 'CONTEXT:' in line or 'SOURCE CODE:' in line:
+                        in_code_section = True
+                        continue
+                    elif 'INSTRUCTION:' in line:
+                        break
+                    elif in_code_section:
+                        code_lines.append(line)
+                
+                source_code = '\n'.join(code_lines).strip()
         
-        # Clean up the extracted code
-        source_code = source_code.strip()
-        if source_code.startswith('```') and source_code.endswith('```'):
-            lines = source_code.split('\n')
-            source_code = '\n'.join(lines[1:-1])
+        if not source_code or len(source_code) < 10:
+            source_code = "# Original code could not be parsed\npass"
         
-        # Simulate different types of modifications based on the task
+        # Simulate different response qualities based on escalation
+        is_escalation = 'ESCALATION REQUEST' in prompt or 'WEAK RESPONSE' in prompt
         task_lower = prompt.lower()
         
-        if 'bug' in task_lower or 'fix' in task_lower:
-            modified_code = self._add_bug_fix_comment(source_code)
+        if is_escalation:
+            # High-quality escalated response
+            modified_code = self._generate_escalated_response(source_code, task_lower)
+        elif 'mobile' in task_lower and 'bug' in task_lower:
+            # Specialized mobile bug fixes
+            modified_code = self._add_mobile_fixes(source_code)
+        elif 'bug' in task_lower or 'fix' in task_lower:
+            modified_code = self._add_comprehensive_bug_fixes(source_code)
         elif 'test' in task_lower:
-            modified_code = self._add_test_comment(source_code)
+            modified_code = self._add_test_enhancements(source_code)
         elif 'optimize' in task_lower or 'performance' in task_lower:
-            modified_code = self._add_optimization_comment(source_code)
+            modified_code = self._add_performance_optimizations(source_code)
         elif 'security' in task_lower:
-            modified_code = self._add_security_comment(source_code)
+            modified_code = self._add_security_enhancements(source_code)
         elif 'documentation' in task_lower or 'doc' in task_lower:
-            modified_code = self._add_documentation(source_code)
+            modified_code = self._add_comprehensive_documentation(source_code)
         else:
-            modified_code = self._add_generic_enhancement(source_code)
+            modified_code = self._add_intelligent_enhancements(source_code)
         
-        # Add a small delay to simulate API call time
-        time.sleep(0.5)
+        # Add delay to simulate API call
+        time.sleep(0.3)
         
         return modified_code
     
@@ -279,6 +284,207 @@ class MistralClient:
         lines.append("# [SURGIINJECT] Enhancement complete")
         
         return '\n'.join(lines)
+    
+    def _add_mobile_fixes(self, code: str) -> str:
+        """Add comprehensive mobile bug fixes"""
+        lines = code.split('\n')
+        
+        # Add mobile-specific enhancements
+        mobile_fixes = [
+            "// [SURGIINJECT] Mobile bug fixes applied",
+            "// Added viewport meta tag handling",
+            "// Enhanced touch event support", 
+            "// Mobile browser compatibility checks",
+            "// Network error handling for mobile",
+            "// Responsive positioning fixes",
+            ""
+        ]
+        
+        # Insert fixes at the beginning
+        result_lines = mobile_fixes + lines
+        
+        # Add mobile-specific improvements throughout the code
+        enhanced_lines = []
+        for line in result_lines:
+            enhanced_lines.append(line)
+            
+            # Add touch event handlers after mouse events
+            if 'mousedown' in line and 'addEventListener' in line:
+                indent = len(line) - len(line.lstrip())
+                touch_line = ' ' * indent + line.replace('mousedown', 'touchstart').replace('mousedown', 'touchstart')
+                enhanced_lines.append(touch_line)
+            
+            # Add network timeout handling
+            if 'fetch(' in line:
+                indent = len(line) - len(line.lstrip())
+                enhanced_lines.append(' ' * indent + "// Added mobile network timeout handling")
+        
+        return '\n'.join(enhanced_lines)
+    
+    def _add_comprehensive_bug_fixes(self, code: str) -> str:
+        """Add comprehensive bug fixes"""
+        lines = code.split('\n')
+        
+        fixes = [
+            "// [SURGIINJECT] Comprehensive bug fixes applied",
+            "// Enhanced error handling and validation",
+            ""
+        ]
+        
+        result_lines = fixes + lines
+        
+        # Add try-catch blocks to functions
+        enhanced_lines = []
+        for i, line in enumerate(result_lines):
+            enhanced_lines.append(line)
+            
+            if line.strip().startswith('function ') or 'def ' in line:
+                indent = len(line) - len(line.lstrip())
+                enhanced_lines.append(' ' * (indent + 4) + "try {")
+                enhanced_lines.append(' ' * (indent + 8) + "// Original function logic")
+                enhanced_lines.append(' ' * (indent + 4) + "} catch (error) {")
+                enhanced_lines.append(' ' * (indent + 8) + "console.error('Function error:', error);")
+                enhanced_lines.append(' ' * (indent + 8) + "throw error;")
+                enhanced_lines.append(' ' * (indent + 4) + "}")
+        
+        return '\n'.join(enhanced_lines)
+    
+    def _add_test_enhancements(self, code: str) -> str:
+        """Add test-related enhancements"""
+        lines = code.split('\n')
+        
+        enhancements = [
+            "// [SURGIINJECT] Test coverage enhanced",
+            "// Added comprehensive test cases",
+            "// Improved assertions and edge case handling",
+            ""
+        ]
+        
+        return '\n'.join(enhancements + lines)
+    
+    def _add_performance_optimizations(self, code: str) -> str:
+        """Add performance optimizations"""
+        lines = code.split('\n')
+        
+        optimizations = [
+            "// [SURGIINJECT] Performance optimizations applied",
+            "// Improved algorithm efficiency",
+            "// Reduced computational complexity",
+            ""
+        ]
+        
+        enhanced_lines = optimizations + lines
+        
+        # Add caching and memoization hints
+        for i, line in enumerate(enhanced_lines):
+            if 'for ' in line or 'while ' in line:
+                indent = len(line) - len(line.lstrip())
+                enhanced_lines.insert(i, ' ' * indent + "// Optimized loop with caching")
+                break
+        
+        return '\n'.join(enhanced_lines)
+    
+    def _add_security_enhancements(self, code: str) -> str:
+        """Add security enhancements"""
+        lines = code.split('\n')
+        
+        security_fixes = [
+            "// [SURGIINJECT] Security enhancements applied",
+            "// Added input validation and sanitization",
+            "// Enhanced authentication and authorization",
+            "// SQL injection and XSS protection",
+            ""
+        ]
+        
+        return '\n'.join(security_fixes + lines)
+    
+    def _add_comprehensive_documentation(self, code: str) -> str:
+        """Add comprehensive documentation"""
+        lines = code.split('\n')
+        
+        doc_header = [
+            "/**",
+            " * [SURGIINJECT] Comprehensive documentation added",
+            " * ",
+            " * This module has been enhanced with detailed documentation",
+            " * including function descriptions, parameter types, and usage examples.",
+            " */",
+            ""
+        ]
+        
+        enhanced_lines = doc_header + lines
+        
+        # Add JSDoc to functions
+        result_lines = []
+        for line in enhanced_lines:
+            if line.strip().startswith('function ') or line.strip().startswith('class '):
+                indent = len(line) - len(line.lstrip())
+                result_lines.extend([
+                    ' ' * indent + "/**",
+                    ' ' * indent + " * Enhanced function with comprehensive documentation",
+                    ' ' * indent + " * @returns {any} Enhanced functionality with improved documentation",
+                    ' ' * indent + " */"
+                ])
+            result_lines.append(line)
+        
+        return '\n'.join(result_lines)
+    
+    def _add_intelligent_enhancements(self, code: str) -> str:
+        """Add intelligent general enhancements"""
+        lines = code.split('\n')
+        
+        enhancements = [
+            "// [SURGIINJECT] Intelligent enhancements applied",
+            "// Improved code quality and maintainability",
+            "// Added best practices and modern patterns",
+            ""
+        ]
+        
+        result_lines = enhancements + lines + ["", "// [SURGIINJECT] Enhancement complete"]
+        return '\n'.join(result_lines)
+    
+    def _generate_escalated_response(self, code: str, task_context: str) -> str:
+        """Generate high-quality escalated response"""
+        lines = code.split('\n')
+        
+        escalated_header = [
+            "// [SURGIINJECT] ESCALATED RESPONSE - High Quality Enhancement",
+            "// Previous response was insufficient, providing comprehensive solution",
+            "// Production-ready implementation with full error handling",
+            ""
+        ]
+        
+        # Apply multiple enhancement layers for escalated response
+        enhanced_code = '\n'.join(escalated_header + lines)
+        
+        if 'mobile' in task_context:
+            enhanced_code = self._add_mobile_fixes(enhanced_code)
+        if 'security' in task_context:
+            enhanced_code = self._add_security_enhancements(enhanced_code)
+        if 'performance' in task_context:
+            enhanced_code = self._add_performance_optimizations(enhanced_code)
+        
+        # Add comprehensive error handling
+        lines = enhanced_code.split('\n')
+        final_lines = []
+        
+        for line in lines:
+            final_lines.append(line)
+            if 'function ' in line or 'class ' in line:
+                indent = len(line) - len(line.lstrip())
+                final_lines.extend([
+                    ' ' * (indent + 4) + "// Escalated: Comprehensive error handling",
+                    ' ' * (indent + 4) + "try {",
+                    ' ' * (indent + 8) + "// Enhanced implementation with full validation",
+                    ' ' * (indent + 4) + "} catch (error) {",
+                    ' ' * (indent + 8) + "console.error('Escalated error handling:', error);",
+                    ' ' * (indent + 8) + "// Implement recovery strategy",
+                    ' ' * (indent + 8) + "throw error;",
+                    ' ' * (indent + 4) + "}"
+                ])
+                break
+        
+        return '\n'.join(final_lines)
 
 # Convenience function for backward compatibility
 def run_model(prompt: str) -> str:

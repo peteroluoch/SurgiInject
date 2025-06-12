@@ -17,6 +17,18 @@
 2. Ensure you have Python 3.10+ installed
 3. The tool uses standard library modules, so no additional dependencies are required for basic functionality
 
+## 🔑 Setup Groq API Access
+
+1. Get your key from https://console.groq.com
+2. Add to `.env` file:
+   ```
+   GROQ_API_KEY=sk-...
+   ```
+3. Or export in your terminal:
+   ```bash
+   export GROQ_API_KEY=sk-...
+   ```
+
 ## Quick Start
 
 ### Basic Usage

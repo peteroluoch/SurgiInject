@@ -10,6 +10,7 @@ Handles the main injection workflow:
 import logging
 from typing import Optional
 from .prompty import build_prompt
+from .quality import is_response_weak, should_escalate, get_escalation_prompt
 from models.mistral_client import run_model
 
 # Configure logging
@@ -74,8 +75,18 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
         
         logger.info("AI model processing completed")
         
-        # Step 3: Validate output
-        if not modified_code:
+        # Step 3: Quality assessment and escalation
+        if is_response_weak(modified_code):
+            logger.warning("Weak response detected, attempting escalation...")
+            escalation_prompt = get_escalation_prompt(formatted_prompt, modified_code)
+            try:
+                modified_code = run_model(escalation_prompt)
+                logger.info("Escalation completed")
+            except Exception as e:
+                logger.error(f"Escalation failed: {e}")
+        
+        # Step 4: Final validation
+        if not modified_code or not modified_code.strip():
             logger.warning("AI model returned empty response, returning original code")
             return source_code
             

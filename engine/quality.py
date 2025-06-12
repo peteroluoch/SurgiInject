@@ -6,7 +6,7 @@ Evaluates AI model responses and determines if escalation is needed.
 
 import re
 import logging
-from typing import Dict, List
+from typing import Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def is_response_weak(response: str) -> bool:
     
     return False
 
-def assess_code_quality(original: str, modified: str) -> Dict[str, any]:
+def assess_code_quality(original: str, modified: str) -> Dict[str, Any]:
     """
     Assess the quality of code modifications.
     
