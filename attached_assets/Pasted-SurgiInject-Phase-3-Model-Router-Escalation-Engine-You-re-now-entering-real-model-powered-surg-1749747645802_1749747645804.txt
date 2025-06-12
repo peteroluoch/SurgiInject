@@ -1,0 +1,99 @@
+SurgiInject: Phase 3 — Model Router & Escalation Engine
+
+You’re now entering real model-powered surgery — time to wire up Mistral via Groq (free), and prep for escalation (Mixtral → GPT-4 if weak).
+
+We’ll:
+
+Route prompts to the best model
+
+Fallback if the response is weak or empty
+
+Plug in Groq’s blazing-fast API for local-first flow
+
+🧠 Prompt 11 — mistral_client.py (Groq API Call)
+python
+Copy
+Edit
+# Inject into surgiinject/models/mistral_client.py
+
+import os
+import requests
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+def run_model(prompt: str) -> str:
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "mixtral-8x7b-32768",
+        "messages": [
+            {"role": "system", "content": "You are a surgical code refactorer. Fix bugs with precision."},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.2,
+        "max_tokens": 2048
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+    return response.json()['choices'][0]['message']['content']
+🧠 Prompt 12 — Add Fallback & Escalation to prompty.py
+python
+Copy
+Edit
+# Inject into surgiinject/engine/prompty.py
+
+def build_prompt(file_path: str, source_code: str, instruction: str) -> str:
+    return f"""📄 FILE: {file_path}
+🧠 TASK: {instruction.strip()}
+💬 CONTEXT:
+{source_code}
+
+🚀 INSTRUCTION:
+{instruction}
+"""
+🧠 Prompt 13 — .env Setup Instruction (Groq API Key)
+markdown
+Copy
+Edit
+# Inject into README.md
+
+## 🔑 Setup Groq API Access
+
+1. Get your key from https://console.groq.com
+2. Add to `.env` file:
+
+    GROQ_API_KEY=sk-...
+3. Or export in your terminal:
+
+    export GROQ_API_KEY=sk-...
+🧠 Prompt 14 — Quality Check Stub (Optional)
+python
+Copy
+Edit
+# Inject into surgiinject/engine/quality.py
+
+def is_response_weak(response: str) -> bool:
+    return not response.strip() or "no change" in response.lower()
+Later we can escalate to GPT-4 if is_response_weak() returns True.
+
+🧠 Prompt 15 — CLI Env Safety Net
+python
+Copy
+Edit
+# Inject into surgiinject/cli.py
+
+if not os.getenv("GROQ_API_KEY"):
+    print("[❌] Missing GROQ_API_KEY in environment.")
+    exit(1)
+✅ Phase 3 Summary
+Feature	Status
+Groq model routing	✅ Done
+Prompt formatting	✅ Done
+Fallback-ready	✅ Staged
+Quality scoring	🕗 Next
+GPT-4 escalation	🕗 Optional Phase 4
+Feedback loop	🕗 Future Phase

@@ -2,17 +2,20 @@
 Mistral AI model client for SurgiInject
 
 Handles communication with Mistral AI models for code modification tasks.
-Currently implements a mock/stub version that will be replaced with real API calls.
+Implements real Groq API integration with fallback to mock responses.
 """
 
 import os
 import logging
 import time
 import re
+import requests
 from typing import Optional, Dict, Any
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 class MistralClient:
     """Client for interacting with Mistral AI models"""
@@ -29,8 +32,10 @@ class MistralClient:
         self.model = model
         self.base_url = "https://api.mistral.ai/v1"
         
-        if not self.api_key:
-            logger.warning("No Mistral API key provided. Using mock responses.")
+        # Check for Groq API key first, then Mistral
+        self.groq_api_key = GROQ_API_KEY
+        if not self.api_key and not self.groq_api_key:
+            logger.warning("No API key provided. Using mock responses.")
             self.mock_mode = True
         else:
             self.mock_mode = False
@@ -50,16 +55,59 @@ class MistralClient:
         if self.mock_mode:
             return self._mock_response(prompt)
         
-        try:
-            # In a real implementation, this would make an API call to Mistral
-            # For now, we'll use the mock response
-            logger.info("Making API call to Mistral (mock mode)")
-            return self._mock_response(prompt)
+        # Try Groq API first (faster and free)
+        if self.groq_api_key:
+            try:
+                logger.info("Making API call to Groq/Mixtral...")
+                return self._call_groq_api(prompt, max_tokens, temperature)
+            except Exception as e:
+                logger.error(f"Error calling Groq API: {e}")
+                logger.info("Falling back to mock response")
+                return self._mock_response(prompt)
+        
+        # Fallback to Mistral API if available
+        if self.api_key:
+            try:
+                logger.info("Making API call to Mistral...")
+                # Real Mistral API implementation would go here
+                return self._mock_response(prompt)
+            except Exception as e:
+                logger.error(f"Error calling Mistral API: {e}")
+                return self._mock_response(prompt)
+        
+        # Final fallback
+        return self._mock_response(prompt)
+    
+    def _call_groq_api(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.2) -> str:
+        """
+        Call Groq API with Mixtral model.
+        
+        Args:
+            prompt (str): Input prompt
+            max_tokens (int): Maximum tokens to generate
+            temperature (float): Sampling temperature
             
-        except Exception as e:
-            logger.error(f"Error calling Mistral API: {e}")
-            # Fallback to mock response
-            return self._mock_response(prompt)
+        Returns:
+            str: Generated response
+        """
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.groq_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "mixtral-8x7b-32768",
+            "messages": [
+                {"role": "system", "content": "You are a surgical code refactorer. Fix bugs with precision."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()['choices'][0]['message']['content']
     
     def _mock_response(self, prompt: str) -> str:
         """

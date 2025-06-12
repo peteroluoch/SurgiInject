@@ -56,19 +56,13 @@ def build_prompt(file_path: str, code: str, task: str) -> str:
     
     # Format the complete prompt
     prompt = f"""📄 FILE: {file_path}
-🧠 TASK: Code modification and enhancement
+🧠 TASK: {task.strip()}
 💬 CONTEXT:
-{context_info}
-
-📋 SOURCE CODE:
-```{language}
 {code}
-```
 
 🚀 INSTRUCTION:
 {task}
-
-Please analyze the source code and provide the complete modified version that addresses the task requirements. Return only the modified code without explanations or comments outside the code."""
+"""
     
     return prompt
 

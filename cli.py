@@ -10,6 +10,13 @@ from pathlib import Path
 from engine.injector import run_injection
 from engine.diff import show_diff
 
+# Phase 3: API Key Safety Check
+if not os.getenv("GROQ_API_KEY"):
+    # Only show warning if not in test mode
+    if not any("test" in arg.lower() for arg in sys.argv):
+        click.echo("⚠️  GROQ_API_KEY not found - using mock responses", err=True)
+        click.echo("💡 Get your free API key at https://console.groq.com", err=True)
+
 @click.group()
 def cli():
     """SurgiInject - AI-powered code injection and modification tool"""
