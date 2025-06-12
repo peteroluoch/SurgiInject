@@ -1,0 +1,39 @@
+modules = ["python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "SurgiInject CLI"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "surgiinject_test"
+
+[[workflows.workflow]]
+name = "SurgiInject CLI"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install click && python cli.py --help"
+
+[[workflows.workflow]]
+name = "surgiinject_test"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python cli.py inject --file README.md --prompt prompts/fix_mobile_blank_bug.txt --verbose"
+
+[deployment]
+run = ["sh", "-c", "pip install click && python cli.py --help"]

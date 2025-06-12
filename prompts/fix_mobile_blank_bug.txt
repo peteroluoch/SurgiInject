@@ -1,0 +1,24 @@
+Analyze the provided source code for mobile-specific display issues that could cause blank screens or rendering problems on mobile devices.
+
+Focus on the following potential issues:
+1. CSS viewport settings and responsive design problems
+2. JavaScript errors that might occur on mobile browsers
+3. Touch event handling issues
+4. Mobile-specific API usage problems
+5. Screen size and orientation handling
+6. Memory or performance issues that affect mobile devices
+
+For each issue found:
+1. Identify the specific problem and its location in the code
+2. Explain why it causes blank screens or display issues on mobile
+3. Provide a corrected version of the problematic code
+4. Add appropriate error handling and fallbacks for mobile devices
+
+If the code appears to be working correctly for mobile, add defensive programming measures to prevent common mobile display issues:
+- Add proper viewport meta tags for HTML files
+- Include responsive design breakpoints for CSS
+- Add touch event support for interactive elements
+- Include mobile-specific error handling
+- Add performance optimizations for mobile devices
+
+Ensure the fixed code maintains all existing functionality while being mobile-friendly and robust against common mobile browser issues.
