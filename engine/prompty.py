@@ -63,3 +63,52 @@ def build_prompt(file_path: str, code: str, task: str) -> str:
 📋 SOURCE CODE:
 ```{language}
 {code}
+```
+
+🚀 INSTRUCTION:
+{task}
+
+Please analyze the source code and provide the complete modified version that addresses the task requirements. Return only the modified code without explanations or comments outside the code."""
+    
+    return prompt
+
+def build_simple_prompt(code: str, task: str) -> str:
+    """
+    Build a simplified prompt without file analysis.
+    
+    Args:
+        code (str): Source code content
+        task (str): Task description
+        
+    Returns:
+        str: Formatted prompt string
+    """
+    prompt = f"""📋 SOURCE CODE:
+```
+{code}
+```
+
+🚀 INSTRUCTION:
+{task}
+
+Please analyze the source code and provide the complete modified version that addresses the task requirements. Return only the modified code without explanations or comments outside the code."""
+    
+    return prompt
+
+def validate_prompt(prompt: str) -> bool:
+    """
+    Validate that a prompt contains required sections.
+    
+    Args:
+        prompt (str): Prompt to validate
+        
+    Returns:
+        bool: True if prompt is valid, False otherwise
+    """
+    if not prompt or not prompt.strip():
+        return False
+    
+    required_sections = ["SOURCE CODE:", "INSTRUCTION:"]
+    prompt_upper = prompt.upper()
+    
+    return all(section in prompt_upper for section in required_sections)

@@ -1,0 +1,106 @@
+SurgiInject Phase 2: Core Logic Implementation (Replit Prompts Set 2)
+Now that Replit has scaffolded your file structure, let's build the MVP logic. This is where the CLI starts actually performing surgical injections.
+
+We're still keeping things token-light with no duplication, but injecting brainpower.
+
+🔧 Prompt 6 — Enhance injector.py with Injection Pipeline
+python
+Copy
+Edit
+# Inject this into surgiinject/engine/injector.py
+
+from engine.prompty import build_prompt
+from models.mistral_client import run_model
+
+def run_injection(source_path: str, prompt_path: str) -> str:
+    with open(source_path, 'r', encoding='utf-8') as f:
+        source_code = f.read()
+
+    with open(prompt_path, 'r', encoding='utf-8') as f:
+        prompt_text = f.read()
+
+    prompt = build_prompt(source_path, source_code, prompt_text)
+    modified_code = run_model(prompt)
+    return modified_code
+🔧 Prompt 7 — Implement diff.py with Unified Diff Generator
+python
+Copy
+Edit
+# Inject into surgiinject/engine/diff.py
+
+import difflib
+
+def generate_diff(original: str, modified: str, file_path: str) -> str:
+    original_lines = original.splitlines(keepends=True)
+    modified_lines = modified.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        original_lines,
+        modified_lines,
+        fromfile=f"{file_path} (original)",
+        tofile=f"{file_path} (modified)",
+        lineterm=""
+    )
+    return ''.join(diff)
+🔧 Prompt 8 — Upgrade cli.py to Handle Apply/Preview
+python
+Copy
+Edit
+# Inject into surgiinject/cli.py
+
+import argparse
+from engine import injector, diff
+
+def main():
+    parser = argparse.ArgumentParser(description="SurgiInject CLI")
+    parser.add_argument("--file", required=True, help="Target source file")
+    parser.add_argument("--prompt", required=True, help="Prompt file")
+    parser.add_argument("--apply", action="store_true", help="Apply injection to file")
+    args = parser.parse_args()
+
+    with open(args.file, 'r', encoding='utf-8') as f:
+        original_code = f.read()
+
+    modified_code = injector.run_injection(args.file, args.prompt)
+
+    if args.apply:
+        with open(args.file, 'w', encoding='utf-8') as f:
+            f.write(modified_code)
+        print("[✅] Code injected and file updated.")
+    else:
+        diff_text = diff.generate_diff(original_code, modified_code, args.file)
+        print(diff_text)
+
+if __name__ == "__main__":
+    main()
+🔧 Prompt 9 — Add Test Stub
+python
+Copy
+Edit
+# Inject into surgiinject/tests/test_injector.py
+
+from engine.injector import run_injection
+
+def test_injection():
+    result = run_injection("sample.js", "prompts/fix_mobile_blank_bug.txt")
+    assert "# [INJECTED COMMENT]" in result
+🔧 Prompt 10 — Finalize requirements.txt
+bash
+Copy
+Edit
+# Inject this into surgiinject/requirements.txt
+
+# No external deps needed yet
+🚀 NEXT STEPS
+Once these are complete:
+
+Add a real .js file with a mobile bug
+
+Create a targeted prompt in prompts/
+
+Run:
+
+bash
+Copy
+Edit
+python cli.py --file ./target/payment.js --prompt ./prompts/fix_mobile_blank_bug

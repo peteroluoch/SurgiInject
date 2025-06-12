@@ -16,6 +16,27 @@ from models.mistral_client import run_model
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+def run_injection_from_files(source_path: str, prompt_path: str) -> str:
+    """
+    Run injection workflow using file paths directly.
+    
+    Args:
+        source_path (str): Path to the source file
+        prompt_path (str): Path to the prompt file
+        
+    Returns:
+        str: Modified source code
+    """
+    with open(source_path, 'r', encoding='utf-8') as f:
+        source_code = f.read()
+
+    with open(prompt_path, 'r', encoding='utf-8') as f:
+        prompt_text = f.read()
+
+    prompt = build_prompt(source_path, source_code, prompt_text)
+    modified_code = run_model(prompt)
+    return modified_code
+
 def run_injection(source_code: str, prompt_template: str, file_path: Optional[str] = None) -> str:
     """
     Run the complete injection workflow.
@@ -85,6 +106,7 @@ def validate_code_structure(original: str, modified: str) -> bool:
         size_ratio = len(modified) / len(original) if len(original) > 0 else float('inf')
         if size_ratio > 3.0 or size_ratio < 0.1:
             logger.warning(f"Significant size change detected: {size_ratio:.2f}x")
+            return False
             
         return True
         
