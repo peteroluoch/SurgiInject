@@ -33,7 +33,7 @@ class MistralClient:
         self.base_url = "https://api.mistral.ai/v1"
         
         # Check for Groq API key first, then Mistral
-        self.groq_api_key = GROQ_API_KEY
+        self.groq_api_key = os.getenv("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")
         if not self.api_key and not self.groq_api_key:
             logger.warning("No API key provided. Using mock responses.")
             self.mock_mode = True
