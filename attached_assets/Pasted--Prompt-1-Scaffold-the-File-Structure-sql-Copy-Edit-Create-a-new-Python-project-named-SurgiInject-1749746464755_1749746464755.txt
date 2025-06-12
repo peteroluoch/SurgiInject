@@ -1,0 +1,91 @@
+ Prompt 1 — Scaffold the File Structure
+sql
+Copy
+Edit
+Create a new Python project named `SurgiInject` with the following structure. Only generate empty files for now:
+
+surgiinject/
+├── cli.py
+├── engine/
+│   ├── injector.py
+│   ├── parser.py
+│   ├── prompty.py
+│   └── diff.py
+├── models/
+│   └── mistral_client.py
+├── prompts/
+│   └── fix_mobile_blank_bug.txt
+├── logs/
+│   └── README.md
+├── tests/
+│   └── test_injector.py
+├── README.md
+└── requirements.txt
+
+Use Python 3.10+, and make it ready to run in Replit. No code yet.
+🔧 Prompt 2 — CLI Entry Point (cli.py)
+markdown
+Copy
+Edit
+Implement `cli.py` for a CLI tool with one command:
+
+Command: `inject`
+Arguments:
+- `--file`: path to source file (required)
+- `--prompt`: path to prompt template (required)
+- `--apply`: optional flag, if present writes changes to file, else shows a diff
+
+Logic:
+1. Read target file
+2. Read prompt template
+3. Pass both to `engine/injector.py`
+4. Print result (or save if `--apply` used)
+🔧 Prompt 3 — Core Injector (injector.py)
+rust
+Copy
+Edit
+In `engine/injector.py`, implement a function `run_injection(source_code: str, prompt_template: str) -> str`.
+
+Steps:
+1. Format the prompt using prompty.py
+2. Send to `models/mistral_client.py` (stub for now, just echo)
+3. Return modified code
+
+Use placeholder model response logic for now (e.g. insert a comment).
+🔧 Prompt 4 — Prompt Builder (prompty.py)
+yaml
+Copy
+Edit
+In `engine/prompty.py`, implement `build_prompt(file_path: str, code: str, task: str) -> str`.
+
+Format:
+📄 FILE: {file_path}
+🧠 TASK: {task}
+💬 CONTEXT:
+{code}
+
+🚀 INSTRUCTION:
+{prompt from .txt file}
+
+Return the final prompt string.
+🔧 Prompt 5 — Dummy Mistral Model Client (mistral_client.py)
+sql
+Copy
+Edit
+In `models/mistral_client.py`, define a `run_model(prompt: str) -> str`.
+
+Return a dummy modified version of the code. For now, simulate model response by appending:
+"# [INJECTED COMMENT]"
+
+Later this will connect to a real LLM endpoint.
+🧠 Final Instructions for Replit
+After these 5 prompts, you’ll have:
+
+A working CLI (python cli.py inject ...)
+
+Prompt templating
+
+Injection mock flow
+
+Ready to plug into real models (Groq, OpenAI, etc.)
+
