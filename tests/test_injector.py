@@ -11,7 +11,7 @@ import sys
 # Add parent directory to path to import modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from engine.injector import run_injection, validate_code_structure
+from engine.injector import run_injection, run_injection_from_files, validate_code_structure
 from engine.prompty import build_prompt, build_simple_prompt, validate_prompt
 from engine.diff import get_diff_stats, has_conflicts
 from engine.parser import CodeParser
@@ -301,6 +301,31 @@ print(calculate(5, 3))
             # Clean up temporary files
             os.unlink(source_path)
             os.unlink(prompt_path)
+
+def test_injection():
+    """Test injection with sample JS file (Phase 2 requirement)"""
+    # Create a temporary JS file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.js', delete=False) as js_file:
+        js_file.write('''
+function processPayment() {
+    // Original payment processing logic
+    return "payment processed";
+}
+        ''')
+        js_path = js_file.name
+    
+    # Create a temporary prompt file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as prompt_file:
+        prompt_file.write("Add error handling to make the function more robust.")
+        prompt_path = prompt_file.name
+    
+    try:
+        result = run_injection_from_files(js_path, prompt_path)
+        assert "SURGIINJECT" in result
+        assert len(result) > 0
+    finally:
+        os.unlink(js_path)
+        os.unlink(prompt_path)
 
 def run_tests():
     """Run all tests"""

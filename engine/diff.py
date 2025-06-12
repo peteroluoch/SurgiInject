@@ -22,6 +22,30 @@ class ColorCodes:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
+def generate_diff(original: str, modified: str, file_path: str) -> str:
+    """
+    Generate unified diff string between original and modified code.
+    
+    Args:
+        original (str): Original source code
+        modified (str): Modified source code
+        file_path (str): Path to the source file
+        
+    Returns:
+        str: Unified diff string
+    """
+    original_lines = original.splitlines(keepends=True)
+    modified_lines = modified.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        original_lines,
+        modified_lines,
+        fromfile=f"{file_path} (original)",
+        tofile=f"{file_path} (modified)",
+        lineterm=""
+    )
+    return ''.join(diff)
+
 def show_diff(original: str, modified: str, filename: str = "file", context_lines: int = 3) -> None:
     """
     Display a colored diff between original and modified code.
