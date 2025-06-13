@@ -6,7 +6,7 @@ The SurgiInject dashboard provides real-time monitoring of injection events, inc
 - Live injection events (start, success, error, escalation, cache hits, fallbacks)
 - Real-time statistics
 - Event history
-- WebSocket-based real-time updates
+- **FastAPI-style WebSocket** for persistent real-time updates
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ python dashboard_server.py
 
 This starts both:
 - **HTTP Server**: `http://localhost:8081` (serves the dashboard UI)
-- **WebSocket Server**: `ws://localhost:8766` (real-time events)
+- **WebSocket Server**: `ws://localhost:8766` (real-time events with FastAPI-style handler)
 
 ### 2. Open the Dashboard
 
@@ -62,13 +62,15 @@ Watch real-time events appear in the dashboard!
 ### Server Architecture
 - **Single Process**: One Python process handles both HTTP and WebSocket
 - **Threaded HTTP**: HTTP server runs in background thread
-- **Async WebSocket**: WebSocket server runs in main async loop
+- **FastAPI-Style WebSocket**: WebSocket server uses FastAPI-style handler for stability
 - **Event Broadcasting**: All injection events broadcast to connected clients
+- **Persistent Connections**: No more disconnection loops or timeout issues
 
 ### Connection Management
 - **Automatic Reconnection**: Client automatically reconnects on disconnect
 - **Heartbeat**: 30-second ping/pong to keep connections alive
 - **Client Cleanup**: Disconnected clients automatically removed
+- **Stale Client Detection**: FastAPI-style stale client cleanup
 
 ### Event Flow
 1. Injection starts → `emit_start()` → Dashboard shows start event
@@ -84,6 +86,7 @@ Watch real-time events appear in the dashboard!
 - Check if server is running: `python dashboard_server.py`
 - Verify ports are free: `netstat -an | findstr ":8081\|:8766"`
 - Kill existing processes: `taskkill /f /im python.exe`
+- **Fixed**: No more "missing 1 required positional argument: 'path'" errors
 
 ### No Events Showing
 - Ensure `--debug` flag is used: `python cli.py inject --debug`
@@ -138,6 +141,7 @@ socket.onmessage = (event) => {
 - **Network**: Minimal WebSocket traffic (JSON events)
 - **CPU**: Low overhead for event broadcasting
 - **Scalability**: Supports multiple concurrent clients
+- **Stability**: FastAPI-style handler prevents disconnection loops
 
 ## Security Considerations
 
@@ -145,6 +149,24 @@ socket.onmessage = (event) => {
 - **No Authentication**: Intended for local development
 - **Event Data**: Contains file paths and code snippets
 - **Logging**: Events logged to console and injection.log
+
+## Recent Fixes
+
+### ✅ WebSocket Disconnection Issues Resolved
+- **Problem**: WebSocket connections were disconnecting repeatedly
+- **Root Cause**: Incorrect handler signature and missing path parameter
+- **Solution**: Implemented FastAPI-style WebSocket handler
+- **Result**: Stable, persistent connections with no disconnection loops
+
+### ✅ Real-Time Event Broadcasting
+- **Problem**: Events weren't being broadcasted reliably
+- **Solution**: FastAPI-style `broadcast_log_event()` method
+- **Result**: Reliable real-time event delivery to all connected clients
+
+### ✅ Stale Client Cleanup
+- **Problem**: Disconnected clients weren't being cleaned up
+- **Solution**: Automatic stale client detection and removal
+- **Result**: Clean connection management and resource efficiency
 
 ## Next Steps
 
