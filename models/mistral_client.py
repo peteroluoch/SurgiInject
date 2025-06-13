@@ -22,23 +22,46 @@ class MistralClient:
     
     def __init__(self, api_key: Optional[str] = None, model: str = "mistral-7b-instruct"):
         """
-        Initialize Mistral client.
-        
+        Initialize Mistral client with secure key injection and configuration logic.
+
         Args:
             api_key (str, optional): Mistral API key. If None, will try to get from environment.
             model (str): Model name to use
         """
-        self.api_key = api_key or os.getenv("MISTRAL_API_KEY")
+        # Secure key injection with dynamic environment-based loading
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
+        self.mistral_api_key = api_key or os.getenv("MISTRAL_API_KEY")
+        self.api_key = self.mistral_api_key  # Maintain backward compatibility
         self.model = model
         self.base_url = "https://api.mistral.ai/v1"
-        
-        # Check for Groq API key first, then Mistral
-        self.groq_api_key = os.getenv("GROQ_API_KEY")
-        if not self.api_key and not self.groq_api_key:
-            logger.warning("No API key provided. Using mock responses.")
-            self.mock_mode = True
-        else:
+
+        # Determine active provider and set mock mode
+        if self.groq_api_key:
+            self.active_provider = "groq"
             self.mock_mode = False
+            logger.info(f"Active provider selected: Groq (model: mixtral-8x7b-32768)")
+        elif self.mistral_api_key:
+            self.active_provider = "mistral"
+            self.mock_mode = False
+            logger.info(f"Active provider selected: Mistral (model: {self.model})")
+        else:
+            self.active_provider = "mock"
+            self.mock_mode = True
+            logger.warning("No API key provided. Using mock responses.")
+            logger.info("Active provider selected: Mock")
+
+        # Initialize mock strategies dispatch map for scalable strategy selection
+        self.mock_strategies = {
+            "bug": self._add_comprehensive_bug_fixes,
+            "fix": self._add_comprehensive_bug_fixes,
+            "test": self._add_test_enhancements,
+            "optimize": self._add_performance_optimizations,
+            "performance": self._add_performance_optimizations,
+            "security": self._add_security_enhancements,
+            "documentation": self._add_comprehensive_documentation,
+            "doc": self._add_comprehensive_documentation,
+            "mobile": self._add_mobile_fixes,
+        }
     
     def generate_response(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.1) -> str:
         """
@@ -109,23 +132,88 @@ class MistralClient:
         }
 
         max_retries = 2
+        start_time = time.time()
+
         for attempt in range(max_retries + 1):
+            attempt_start = time.time()
             try:
                 response = requests.post(url, headers=headers, json=payload, timeout=10)
-                response.raise_for_status()
-                return response.json()['choices'][0]['message']['content']
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Groq API attempt {attempt + 1} failed: {e}")
-                if hasattr(response, 'status_code'):
-                    logger.error(f"Response status: {response.status_code}")
-                if hasattr(response, 'text'):
-                    logger.error(f"Response payload: {response.text[:500]}")
+                elapsed_time = time.time() - attempt_start
 
-                if attempt < max_retries:
-                    logger.info(f"Retrying in 1 second... (attempt {attempt + 2}/{max_retries + 1})")
-                    time.sleep(1)
+                response.raise_for_status()
+                logger.info(f"Groq API success on attempt {attempt + 1} (elapsed: {elapsed_time:.2f}s)")
+                return response.json()['choices'][0]['message']['content']
+
+            except requests.exceptions.RequestException as e:
+                elapsed_time = time.time() - attempt_start
+
+                # Smart error intelligence with detailed logging
+                error_type = type(e).__name__
+                status_code = getattr(response, 'status_code', 'N/A') if 'response' in locals() else 'N/A'
+
+                logger.error(f"Groq API attempt {attempt + 1}/{max_retries + 1} failed:")
+                logger.error(f"  Error type: {error_type}")
+                logger.error(f"  Status code: {status_code}")
+                logger.error(f"  Elapsed time: {elapsed_time:.2f}s")
+                logger.error(f"  Error details: {str(e)[:200]}")
+
+                if hasattr(response, 'text') and 'response' in locals():
+                    logger.error(f"  Response payload: {response.text[:300]}")
+
+                # Determine if we should retry based on error type
+                should_retry = self._should_retry_groq_error(e, status_code, attempt, max_retries)
+
+                if should_retry and attempt < max_retries:
+                    retry_delay = min(2 ** attempt, 5)  # Exponential backoff, max 5s
+                    logger.info(f"Retrying in {retry_delay}s... (attempt {attempt + 2}/{max_retries + 1})")
+                    time.sleep(retry_delay)
                 else:
-                    raise Exception(f"Groq API failed after {max_retries + 1} attempts: {e}")
+                    total_elapsed = time.time() - start_time
+                    logger.error(f"Groq API failed after {max_retries + 1} attempts (total time: {total_elapsed:.2f}s)")
+                    raise Exception(f"Groq API failed after {max_retries + 1} attempts: {error_type} - {e}")
+
+    def _should_retry_groq_error(self, error: Exception, status_code: str, attempt: int, max_retries: int) -> bool:
+        """
+        Determine if a Groq API error should trigger a retry based on error intelligence.
+
+        Args:
+            error: The exception that occurred
+            status_code: HTTP status code if available
+            attempt: Current attempt number (0-based)
+            max_retries: Maximum number of retries allowed
+
+        Returns:
+            bool: True if should retry, False otherwise
+        """
+        if attempt >= max_retries:
+            return False
+
+        # Retry on network-related errors
+        if isinstance(error, (requests.exceptions.ConnectionError,
+                             requests.exceptions.Timeout,
+                             requests.exceptions.ConnectTimeout,
+                             requests.exceptions.ReadTimeout)):
+            logger.info("Network error detected - will retry")
+            return True
+
+        # Retry on server errors (5xx)
+        if isinstance(status_code, int) and 500 <= status_code < 600:
+            logger.info(f"Server error {status_code} detected - will retry")
+            return True
+
+        # Retry on rate limiting (429)
+        if status_code == 429:
+            logger.info("Rate limit detected - will retry with backoff")
+            return True
+
+        # Don't retry on client errors (4xx except 429)
+        if isinstance(status_code, int) and 400 <= status_code < 500 and status_code != 429:
+            logger.info(f"Client error {status_code} detected - will not retry")
+            return False
+
+        # Default: retry for unknown errors
+        logger.info("Unknown error type - will retry")
+        return True
 
     def _call_mistral_api(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.1) -> str:
         """
@@ -158,24 +246,50 @@ class MistralClient:
         }
 
         max_retries = 2
+        start_time = time.time()
+
+        logger.info(f"Calling Mistral API with model: {self.model}")
+
         for attempt in range(max_retries + 1):
+            attempt_start = time.time()
             try:
                 response = requests.post(url, headers=headers, json=payload, timeout=10)
+                elapsed_time = time.time() - attempt_start
+
                 response.raise_for_status()
-                return response.json()['choices'][0]['message']['content']
+                result = response.json()['choices'][0]['message']['content']
+
+                logger.info(f"Mistral API success on attempt {attempt + 1}")
+                logger.info(f"  Model used: {self.model}")
+                logger.info(f"  Response time: {elapsed_time:.2f}s")
+                logger.info(f"  Response length: {len(result)} characters")
+
+                return result
+
             except requests.exceptions.RequestException as e:
-                logger.error(f"Mistral API attempt {attempt + 1} failed: {e}")
-                if hasattr(response, 'status_code'):
-                    logger.error(f"Response status: {response.status_code}")
-                if hasattr(response, 'text'):
-                    logger.error(f"Response payload: {response.text[:500]}")
+                elapsed_time = time.time() - attempt_start
+                error_type = type(e).__name__
+                status_code = getattr(response, 'status_code', 'N/A') if 'response' in locals() else 'N/A'
+
+                logger.error(f"Mistral API attempt {attempt + 1}/{max_retries + 1} failed:")
+                logger.error(f"  Model: {self.model}")
+                logger.error(f"  Error type: {error_type}")
+                logger.error(f"  Status code: {status_code}")
+                logger.error(f"  Elapsed time: {elapsed_time:.2f}s")
+                logger.error(f"  Error details: {str(e)[:200]}")
+
+                if hasattr(response, 'text') and 'response' in locals():
+                    logger.error(f"  Response payload: {response.text[:300]}")
 
                 if attempt < max_retries:
-                    logger.info(f"Retrying in 1 second... (attempt {attempt + 2}/{max_retries + 1})")
-                    time.sleep(1)
+                    retry_delay = min(2 ** attempt, 5)  # Exponential backoff
+                    logger.info(f"Retrying in {retry_delay}s... (attempt {attempt + 2}/{max_retries + 1})")
+                    time.sleep(retry_delay)
                 else:
-                    logger.error(f"Mistral API failed after {max_retries + 1} attempts, falling back to mock")
-                    raise Exception(f"Mistral API failed after {max_retries + 1} attempts: {e}")
+                    total_elapsed = time.time() - start_time
+                    logger.error(f"Mistral API failed after {max_retries + 1} attempts (total time: {total_elapsed:.2f}s)")
+                    logger.error("Falling back to mock response")
+                    raise Exception(f"Mistral API failed after {max_retries + 1} attempts: {error_type} - {e}")
 
     def _mock_response(self, prompt: str) -> str:
         """
@@ -218,40 +332,37 @@ class MistralClient:
         if not source_code or len(source_code) < 10:
             source_code = "# Original code could not be parsed\npass"
         
-        # Simulate different response qualities based on escalation
+        # Check for escalation first (highest priority)
         is_escalation = 'ESCALATION REQUEST' in prompt or 'WEAK RESPONSE' in prompt
         task_lower = prompt.lower()
 
-        # Strategy pattern dispatch dictionary
-        strategies = {
-            "bug": self._add_comprehensive_bug_fixes,
-            "fix": self._add_comprehensive_bug_fixes,
-            "test": self._add_test_enhancements,
-            "optimize": self._add_performance_optimizations,
-            "performance": self._add_performance_optimizations,
-            "security": self._add_security_enhancements,
-            "documentation": self._add_comprehensive_documentation,
-            "doc": self._add_comprehensive_documentation,
-        }
-
         if is_escalation:
-            # High-quality escalated response
+            logger.info("Escalation detected - generating high-quality response")
             modified_code = self._generate_escalated_response(source_code, task_lower)
-        elif 'mobile' in task_lower and 'bug' in task_lower:
-            # Specialized mobile bug fixes
-            modified_code = self._add_mobile_fixes(source_code)
         else:
-            # Use strategy pattern to select enhancement
+            # Use dispatch map for scalable strategy selection
             selected_strategy = None
-            for keyword, strategy in strategies.items():
+            matched_keyword = None
+
+            # Find first matching keyword in prompt using dispatch map
+            for keyword, strategy in self.mock_strategies.items():
                 if keyword in task_lower:
                     selected_strategy = strategy
+                    matched_keyword = keyword
                     break
 
             if selected_strategy:
+                logger.info(f"Strategy selected: {matched_keyword} -> {selected_strategy.__name__}")
                 modified_code = selected_strategy(source_code)
             else:
+                # Fallback to generic enhancement if no match
+                logger.info("No specific strategy matched - using generic enhancement")
                 modified_code = self._add_generic_enhancement(source_code)
+
+                # Check if response seems weak or ambiguous for potential escalation
+                if len(modified_code) < 100 or 'pass' in source_code:
+                    logger.warning("Response may be weak - consider escalation")
+                    # Could trigger escalation logic here if needed
         
         # Add delay to simulate API call
         time.sleep(0.3)
