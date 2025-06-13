@@ -1,0 +1,338 @@
+.diff-viewer {
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    margin: 20px 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.diff-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: #2d2d2d;
+    border-bottom: 1px solid #333;
+    border-radius: 8px 8px 0 0;
+}
+
+.header-info h3 {
+    margin: 0;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.filepath {
+    color: #888;
+    font-size: 12px;
+    margin-left: 10px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.apply-btn, .reject-btn, .close-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.apply-btn {
+    background: #28a745;
+    color: white;
+}
+
+.apply-btn:hover:not(:disabled) {
+    background: #218838;
+}
+
+.apply-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.reject-btn {
+    background: #dc3545;
+    color: white;
+}
+
+.reject-btn:hover {
+    background: #c82333;
+}
+
+.close-btn {
+    background: #6c757d;
+    color: white;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+.close-btn:hover {
+    background: #5a6268;
+}
+
+.diff-viewer-tabs {
+    display: flex;
+    background: #252525;
+    border-bottom: 1px solid #333;
+}
+
+.diff-viewer-tabs button {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.diff-viewer-tabs button:hover {
+    background: #2d2d2d;
+    color: #fff;
+}
+
+.diff-viewer-tabs button.active {
+    color: #fff;
+    border-bottom-color: #007acc;
+    background: #2d2d2d;
+}
+
+.diff-viewer-content {
+    flex: 1;
+    overflow: auto;
+    padding: 20px;
+    max-height: 60vh;
+}
+
+.diff-content {
+    background: #1e1e1e;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.diff-line {
+    display: flex;
+    padding: 2px 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.diff-line.addition {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+}
+
+.diff-line.deletion {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+}
+
+.diff-line.hunk {
+    background: #2d2d2d;
+    color: #007acc;
+    font-weight: 600;
+    padding: 8px 0;
+}
+
+.diff-line.file-header {
+    background: #252525;
+    color: #888;
+    font-style: italic;
+    padding: 4px 0;
+}
+
+.line-number {
+    width: 50px;
+    padding: 0 10px;
+    text-align: right;
+    color: #666;
+    user-select: none;
+    border-right: 1px solid #333;
+}
+
+.line-content {
+    flex: 1;
+    padding: 0 10px;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+.side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    height: 100%;
+}
+
+.side-panel {
+    background: #1e1e1e;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.side-panel h4 {
+    margin: 0;
+    padding: 15px;
+    background: #2d2d2d;
+    color: #fff;
+    border-bottom: 1px solid #333;
+}
+
+.code-panel {
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.code-line {
+    display: flex;
+    padding: 2px 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.code-line:hover {
+    background: #2d2d2d;
+}
+
+.stats-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    padding: 20px;
+    background: #2d2d2d;
+    border-radius: 4px;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background: #1e1e1e;
+    border-radius: 4px;
+    border-left: 3px solid #007acc;
+}
+
+.stat-label {
+    color: #ccc;
+    font-weight: 500;
+}
+
+.stat-value {
+    color: #fff;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 3px;
+    background: #333;
+}
+
+.stat-value.addition {
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+}
+
+.stat-value.deletion {
+    background: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+}
+
+.error-panel {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(220, 53, 69, 0.1);
+    border: 1px solid #dc3545;
+    border-radius: 4px;
+    color: #dc3545;
+}
+
+.error-panel h4 {
+    margin: 0 0 10px 0;
+    color: #dc3545;
+}
+
+.error-panel p {
+    margin: 0;
+    font-size: 13px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .diff-viewer {
+        margin: 10px 0;
+        font-size: 11px;
+    }
+    
+    .diff-viewer-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .header-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+    
+    .side-by-side {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .stats-panel {
+        grid-template-columns: 1fr;
+    }
+    
+    .diff-viewer-tabs button {
+        padding: 8px 12px;
+        font-size: 11px;
+    }
+    
+    .line-number {
+        width: 40px;
+        font-size: 10px;
+    }
+}
+
+/* Scrollbar styling */
+.diff-viewer-content::-webkit-scrollbar,
+.code-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.diff-viewer-content::-webkit-scrollbar-track,
+.code-panel::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+.diff-viewer-content::-webkit-scrollbar-thumb,
+.code-panel::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+.diff-viewer-content::-webkit-scrollbar-thumb:hover,
+.code-panel::-webkit-scrollbar-thumb:hover {
+    background: #777;
+} 

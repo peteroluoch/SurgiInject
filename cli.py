@@ -34,81 +34,170 @@ def cli():
     pass
 
 @cli.command()
-@click.option('--file', '-f', required=True, help='Path to source file to modify')
-@click.option('--prompt', '-p', required=True, help='Prompt name or path to prompt template file. If the prompt contains spaces and no file matches, it is treated as an inline prompt.')
-@click.option('--apply', '-a', is_flag=True, help='Apply changes to file (default: show diff only)')
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
-@click.option('--provider', '-pr', default='auto', type=click.Choice(['anthropic', 'groq-mixtral', 'groq-gemma', 'groq-llama', 'auto']), help='Specify the provider to use')
-@click.option('--force', is_flag=True, help='Force injection even if duplicate prompt is detected')
-@click.option('--encoding', default='utf-8', help='Specify the file encoding')
-@click.option('--debug', is_flag=True, help='Enable debug mode for detailed logs')
-@click.option('--no-cache', is_flag=True, help='Disable cache usage')
-@click.option('--force-refresh', is_flag=True, help='Force refresh even if result is cached')
-def inject(file, prompt, apply, verbose, provider, force, encoding, debug, no_cache, force_refresh):
-    """
-    Inject AI-powered modifications into a source file using a prompt template.
-    """
-
+@click.option('--file', '-f', required=True, help='Target file to inject')
+@click.option('--prompt', '-p', required=True, help='Prompt template file')
+@click.option('--apply', is_flag=True, help='Apply the injection immediately')
+@click.option('--preview-only', is_flag=True, help='Preview injection without applying')
+@click.option('--with-context', is_flag=True, default=True, help='Use context-aware injection')
+@click.option('--coordinated', is_flag=True, help='Use coordinated batch injection')
+@click.option('--provider', default='auto', help='AI provider to use')
+@click.option('--force', is_flag=True, help='Force injection even if file is already injected')
+def inject(file, prompt, apply, preview_only, with_context, coordinated, provider, force):
+    """Inject AI-generated code into a file"""
     try:
-        # Validate source file
-        if not os.path.exists(file):
-            click.echo(f"❌ Error: Source file '{file}' not found", err=True)
-            sys.exit(1)
-
-        # Resolve prompt path or use inline prompt
-        if ' ' in prompt or not os.path.isfile(os.path.join("prompts", f"{prompt}.txt")):
-            prompt_template = prompt
+        if preview_only:
+            # Use diff engine for preview
+            from engine.diff_engine import preview_injection
+            
+            click.echo(f"🔍 Previewing injection for {file}...")
+            result = preview_injection(
+                file_path=file,
+                prompt_path=prompt,
+                with_context=with_context
+            )
+            
+            if "error" in result:
+                click.echo(f"❌ Preview failed: {result['error']}", err=True)
+                return 1
+            
+            if not result.get("has_changes", False):
+                click.echo("ℹ️  No changes detected in preview.")
+                return 0
+            
+            # Display diff
+            click.echo(f"\n📊 Preview for {result['filename']}:")
+            click.echo(f"📁 File: {result['filepath']}")
+            click.echo(f"🧠 Context-aware: {'Yes' if result.get('with_context') else 'No'}")
+            
+            if result.get("diff_stats"):
+                stats = result["diff_stats"]
+                click.echo(f"📈 Changes: +{stats['additions']} -{stats['deletions']} ({stats['total_changes']} total)")
+            
+            click.echo("\n" + "="*60)
+            click.echo("DIFF PREVIEW:")
+            click.echo("="*60)
+            
+            if result.get("diff"):
+                # Colorize diff output
+                for line in result["diff"].split('\n'):
+                    if line.startswith('+') and not line.startswith('+++'):
+                        click.echo(click.style(line, fg='green'))
+                    elif line.startswith('-') and not line.startswith('---'):
+                        click.echo(click.style(line, fg='red'))
+                    elif line.startswith('@@'):
+                        click.echo(click.style(line, fg='blue', bold=True))
+                    else:
+                        click.echo(line)
+            else:
+                click.echo("No diff available")
+            
+            click.echo("="*60)
+            click.echo("💡 Use --apply to apply these changes")
+            return 0
+        
+        elif coordinated:
+            # Use batch engine for coordinated injection
+            from engine.batch_engine import batch_inject
+            
+            click.echo(f"🚀 Running coordinated batch injection...")
+            result = batch_inject(
+                files=[file],
+                prompt_path=prompt,
+                with_context=with_context,
+                provider=provider,
+                force=force
+            )
+            
+            if result["success"]:
+                click.echo(f"✅ Coordinated injection completed successfully!")
+                click.echo(f"📊 Files processed: {result['total_files']}")
+                click.echo(f"✅ Successful: {result['successful_injections']}")
+                click.echo(f"❌ Failed: {result['failed_injections']}")
+                
+                if result.get("injected_files"):
+                    click.echo("\n📁 Injected files:")
+                    for injected_file in result["injected_files"]:
+                        click.echo(f"  ✅ {injected_file}")
+                
+                if result.get("skipped_files"):
+                    click.echo("\n⏭️  Skipped files:")
+                    for skipped_file in result["skipped_files"]:
+                        click.echo(f"  ⏭️  {skipped_file}")
+                
+                return 0
+            else:
+                click.echo(f"❌ Coordinated injection failed: {result.get('error', 'Unknown error')}", err=True)
+                return 1
+        
+        elif with_context:
+            # Use context-aware injection
+            from engine.context_builder import inject_with_context
+            
+            click.echo(f"🧠 Running context-aware injection for {file}...")
+            result = inject_with_context(
+                file_path=Path(file),
+                prompt_template=prompt,
+                project_root=Path(file).parent,
+                max_context_files=5
+            )
+            
+            if apply:
+                # Write the result to file
+                with open(file, 'w', encoding='utf-8') as f:
+                    f.write(result)
+                click.echo(f"✅ Context-aware injection applied to {file}")
+            else:
+                click.echo(f"💡 Preview of context-aware injection for {file}:")
+                click.echo("="*60)
+                click.echo(result)
+                click.echo("="*60)
+                click.echo("💡 Use --apply to apply these changes")
+            
+            return 0
+        
         else:
-            prompt_path = os.path.join("prompts", f"{prompt}.txt")
-            prompt_template = read_input_file(prompt_path)
-
-        if verbose:
-            click.echo(f"🔍 Using prompt: {prompt_template}")
-
-        # Read source code with encoding handling
-        source_code = read_input_file(file)
-
-        if debug:
-            logger.setLevel(logging.DEBUG)
-
-        if verbose:
-            click.echo(f"📖 Reading source file: {file}")
-
-        # Handle provider selection
-        if provider == 'auto':
-            provider = auto_select_provider()
-        click.echo(f"Selected provider: {provider}")
-
-        # Check for duplicate prompt
-        prompt_hash = hash(prompt_template)
-        if not force and is_duplicate(prompt_hash):
-            click.echo("⚠️ Prompt already injected previously. Use --force to override.")
-            return
-
-        # Run AI injection
-        if verbose:
-            click.echo("🚀 Running AI injection...")
-        modified_code = run_injection(source_code, prompt_template, file_path=file, provider=provider, force=force)
-
-        # Output results
-        if apply:
-            with open(file, 'w', encoding='utf-8') as f:
-                f.write(modified_code)
-            click.echo(f"✅ Changes applied to {file}")
-        else:
-            click.echo("📋 Proposed changes:")
-            show_diff(source_code, modified_code, file)
-            click.echo("\n💡 Use --apply to write these changes to the file")
-
-        # Log injection details
-        logger.info(f"✅ Injected: {provider} | Tokens used: ~{len(source_code)} | Timestamp: {datetime.now()}")
-
-    except KeyboardInterrupt:
-        click.echo("\n⚠️  Operation cancelled by user")
-        sys.exit(1)
+            # Use regular injection
+            from engine.injector import run_injection
+            
+            click.echo(f"🚀 Running injection for {file}...")
+            
+            # Read the source file
+            with open(file, 'r', encoding='utf-8') as f:
+                source_code = f.read()
+            
+            # Read the prompt template
+            with open(prompt, 'r', encoding='utf-8') as f:
+                prompt_template = f.read()
+            
+            # Run the injection
+            result = run_injection(
+                source_code=source_code,
+                prompt_template=prompt_template,
+                file_path=file,
+                provider=provider,
+                force=force
+            )
+            
+            if apply:
+                # Write the result to file
+                with open(file, 'w', encoding='utf-8') as f:
+                    f.write(result)
+                click.echo(f"✅ Injection applied to {file}")
+            else:
+                click.echo(f"💡 Preview of injection for {file}:")
+                click.echo("="*60)
+                click.echo(result)
+                click.echo("="*60)
+                click.echo("💡 Use --apply to apply these changes")
+            
+            return 0
+            
+    except FileNotFoundError as e:
+        click.echo(f"❌ File not found: {e}", err=True)
+        return 1
     except Exception as e:
-        click.echo(f"❌ Unexpected error: {e}", err=True)
-        sys.exit(1)
+        click.echo(f"❌ Injection failed: {e}", err=True)
+        return 1
 
 @cli.command()
 @click.option('--path', '-p', required=True, help='Path to directory to process')
@@ -119,12 +208,17 @@ def inject(file, prompt, apply, verbose, provider, force, encoding, debug, no_ca
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
 @click.option('--max-size', default=10.0, help='Maximum file size in MB to process')
 @click.option('--exclude', multiple=True, help='Directories to exclude (e.g., __pycache__, .git)')
-def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, exclude):
+@click.option('--with-context', is_flag=True, help='Include dependency context for Python files')
+@click.option('--project-root', help='Root directory of the project for context analysis')
+def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, exclude, with_context, project_root):
     """
     Inject AI-powered modifications into all files in a directory.
     
     This command processes multiple files recursively, applying the same prompt
     to each file that matches the specified extensions.
+    
+    When --with-context is used, Python files will include dependency context
+    from imported modules to provide better AI understanding of the codebase.
     """
     
     try:
@@ -146,6 +240,11 @@ def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, ex
         click.echo(f"📁 Extensions: {list(extensions)}")
         click.echo(f"🔄 Recursive: {recursive}")
         click.echo(f"💾 Apply changes: {apply}")
+        click.echo(f"🧠 With context: {with_context}")
+        
+        if with_context:
+            project_root_path = project_root if project_root else path
+            click.echo(f"📂 Project root for context: {project_root_path}")
         
         # Set default exclusions if none provided
         if not exclude:
@@ -156,7 +255,9 @@ def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, ex
             path=path,
             prompt_path=prompt,
             extensions=list(extensions),
-            recursive=recursive
+            recursive=recursive,
+            with_context=with_context,
+            project_root=project_root
         )
         
         # Display results
@@ -166,6 +267,10 @@ def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, ex
         click.echo(f"⏭️ Skipped (already injected): {len(results['skipped'])}")
         click.echo(f"❌ Failed: {len(results['failed'])}")
         
+        if with_context:
+            context_files = [f for f in results['injected'] if f.endswith('.py')]
+            click.echo(f"🧠 Context-aware injections: {len(context_files)}")
+        
         if results['failed']:
             click.echo(f"\n❌ Failed files:")
             for failed in results['failed']:
@@ -174,7 +279,8 @@ def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, ex
         if results['injected']:
             click.echo(f"\n✅ Successfully injected:")
             for success in results['injected']:
-                click.echo(f"   - {success}")
+                context_indicator = " 🧠" if with_context and success.endswith('.py') else ""
+                click.echo(f"   - {success}{context_indicator}")
                 
         if results['skipped']:
             click.echo(f"\n⏭️ Skipped (already had marker):")

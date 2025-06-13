@@ -16,6 +16,7 @@ from .file_utils import (
     is_meaningful_response,
     safe_write_file
 )
+from .context_builder import inject_with_context, ContextBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class RecursiveInjector:
         self.injected_files = []
         self.failed_files = []
         self.dependency_map = {}
+        self.context_builder = None
         
     def inject_directory(
         self, 
@@ -34,7 +36,9 @@ class RecursiveInjector:
         extensions: List[str] = [".py", ".html", ".js", ".css", ".txt"],
         recursive: bool = True,
         apply_changes: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+        with_context: bool = False,
+        project_root: str = None
     ) -> Dict[str, any]:
         """
         Inject AI modifications into all files in a directory
@@ -46,6 +50,8 @@ class RecursiveInjector:
             recursive: Whether to process subdirectories
             apply_changes: Whether to apply changes or just show diff
             verbose: Enable verbose logging
+            with_context: Whether to include dependency context
+            project_root: Root directory of the project for context analysis
             
         Returns:
             Dict containing results and statistics
@@ -57,6 +63,13 @@ class RecursiveInjector:
         logger.info(f"Starting recursive injection in: {directory_path}")
         logger.info(f"Extensions: {extensions}")
         logger.info(f"Recursive: {recursive}")
+        logger.info(f"With context: {with_context}")
+        
+        # Initialize context builder if needed
+        if with_context:
+            project_root_path = Path(project_root) if project_root else directory
+            self.context_builder = ContextBuilder(project_root_path)
+            logger.info(f"Context analysis enabled for project root: {project_root_path}")
         
         # Reset state
         self.injected_files = []
@@ -88,14 +101,24 @@ class RecursiveInjector:
                     logger.info(f"Skipping empty file: {file_path}")
                     continue
                 
-                # Run injection using the correct function signature
-                modified_code = run_injection(
-                    source_code=source_code,
-                    prompt_template=prompt_template,
-                    file_path=str(file_path),
-                    provider='auto',
-                    force=False
-                )
+                # Run injection with or without context
+                if with_context and file_path.suffix == '.py':
+                    logger.info(f"Running context-aware injection for: {file_path}")
+                    modified_code = inject_with_context(
+                        file_path=file_path,
+                        prompt_template=prompt_template,
+                        project_root=project_root_path if with_context else None,
+                        max_context_files=5
+                    )
+                else:
+                    # Run injection using the correct function signature
+                    modified_code = run_injection(
+                        source_code=source_code,
+                        prompt_template=prompt_template,
+                        file_path=str(file_path),
+                        provider='auto',
+                        force=False
+                    )
                 
                 # Check if injection was successful and meaningful
                 if is_meaningful_response(modified_code):
@@ -106,7 +129,8 @@ class RecursiveInjector:
                         'file': str(file_path),
                         'original': source_code,
                         'modified': marked_content,
-                        'success': True
+                        'success': True,
+                        'with_context': with_context
                     })
                     logger.info(f"Success: {file_path}")
                     
@@ -144,7 +168,8 @@ class RecursiveInjector:
             'injected_files': self.injected_files,
             'failed_files': self.failed_files,
             'directory': directory_path,
-            'prompt': prompt_path
+            'prompt': prompt_path,
+            'with_context': with_context
         }
         
         logger.info(f"Injection complete: {results['successful']}/{results['total_files']} files processed")
@@ -231,7 +256,9 @@ def inject_directory(
     extensions: List[str] = [".py", ".html", ".js", ".css", ".txt"],
     recursive: bool = True,
     apply_changes: bool = False,
-    verbose: bool = False
+    verbose: bool = False,
+    with_context: bool = False,
+    project_root: str = None
 ) -> Dict[str, any]:
     """Convenience function for directory injection"""
     injector = RecursiveInjector()
@@ -241,7 +268,9 @@ def inject_directory(
         extensions=extensions,
         recursive=recursive,
         apply_changes=apply_changes,
-        verbose=verbose
+        verbose=verbose,
+        with_context=with_context,
+        project_root=project_root
     )
 
 def file_contains_marker(file_path: Path, marker: str = "# Injected by SurgiInject") -> bool:
@@ -253,10 +282,12 @@ def inject_dir(
     path: str,
     prompt_path: str,
     extensions: List[str] = [".py", ".html", ".js"],
-    recursive: bool = True
+    recursive: bool = True,
+    with_context: bool = False,
+    project_root: str = None
 ) -> Dict[str, List[str]]:
     """
-    Enhanced inject_dir function with marker logic and meaningful response checking
+    Enhanced inject_dir function with marker logic, meaningful response checking, and context support
     """
     injected = []
     skipped = []
@@ -266,6 +297,13 @@ def inject_dir(
     if not base.exists():
         logger.error(f"Directory not found: {path}")
         return {"injected": injected, "skipped": skipped, "failed": failed}
+    
+    # Initialize context builder if needed
+    context_builder = None
+    if with_context:
+        project_root_path = Path(project_root) if project_root else base
+        context_builder = ContextBuilder(project_root_path)
+        logger.info(f"Context analysis enabled for project root: {project_root_path}")
     
     files = []
     if recursive:
@@ -297,7 +335,18 @@ def inject_dir(
                 continue
             
             logger.info(f"Injecting: {file_path}")
-            result = run_injection_from_files(str(file_path), prompt_path)
+            
+            # Run injection with or without context
+            if with_context and file_path.suffix == '.py' and context_builder:
+                logger.info(f"Running context-aware injection for: {file_path}")
+                result = inject_with_context(
+                    file_path=file_path,
+                    prompt_template=open(prompt_path, 'r').read(),
+                    project_root=project_root_path if with_context else None,
+                    max_context_files=5
+                )
+            else:
+                result = run_injection_from_files(str(file_path), prompt_path)
             
             # Check if response is meaningful
             if is_meaningful_response(result):

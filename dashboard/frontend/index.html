@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SurgiInject Dashboard - AI-Powered Code Injection</title>
+    <link rel="stylesheet" href="/static/styles/main.css">
+    <link rel="stylesheet" href="/static/components/DiffViewer.css">
+    <link rel="stylesheet" href="/static/components/FileSelectDropdown.css">
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // FileSelectDropdown Component
+        const FileSelectDropdown = ({ onFileSelect, onPromptSelect, projectRoot = '.' }) => {
+            const [files, setFiles] = useState([]);
+            const [prompts, setPrompts] = useState([]);
+            const [selectedFile, setSelectedFile] = useState('');
+            const [selectedPrompt, setSelectedPrompt] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [showDropdown, setShowDropdown] = useState(false);
+
+            useEffect(() => {
+                loadFiles();
+                loadPrompts();
+            }, [projectRoot]);
+
+            const loadFiles = async () => {
+                try {
+                    setIsLoading(true);
+                    setError(null);
+                    
+                    const response = await fetch(`/api/files/discover?root=${projectRoot}`);
+                    if (!response.ok) {
+                        throw new Error('Failed to load files');
+                    }
+                    
+                    const data = await response.json();
+                    setFiles(data.files || []);
+                    
+                } catch (err) {
+                    console.error('Failed to load files:', err);
+                    setError('Failed to load files. Please check the project root.');
+                    setFiles([]);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const loadPrompts = async () => {
+                try {
+                    const response = await fetch('/api/prompts/list');
+                    if (response.ok) {
+                        const data = await response.json();
+                        setPrompts(data.prompts || []);
+                    } else {
+                        setPrompts([
+                            'prompts/landing_page.txt',
+                            'prompts/api_enhancement.txt',
+                            'prompts/error_handling.txt',
+                            'prompts/documentation.txt'
+                        ]);
+                    }
+                } catch (err) {
+                    console.error('Failed to load prompts:', err);
+                    setPrompts([
+                        'prompts/landing_page.txt',
+                        'prompts/api_enhancement.txt',
+                        'prompts/error_handling.txt',
+                        'prompts/documentation.txt'
+                    ]);
+                }
+            };
+
+            const handleFileSelect = (filePath) => {
+                setSelectedFile(filePath);
+                setShowDropdown(false);
+                onFileSelect(filePath);
+            };
+
+            const handlePromptSelect = (promptPath) => {
+                setSelectedPrompt(promptPath);
+                onPromptSelect(promptPath);
+            };
+
+            const handleInputChange = (e) => {
+                setSelectedFile(e.target.value);
+                setShowDropdown(true);
+            };
+
+            const getFileIcon = (filename) => {
+                const ext = filename.split('.').pop().toLowerCase();
+                const icons = {
+                    'py': '🐍', 'js': '📜', 'ts': '📘', 'jsx': '⚛️', 'tsx': '⚛️',
+                    'html': '🌐', 'css': '🎨', 'json': '📋', 'md': '📝', 'txt': '📄'
+                };
+                return icons[ext] || '📄';
+            };
+
+            return (
+                <div className="file-select-container">
+                    <div className="select-group">
+                        <label className="select-label">File to Preview:</label>
+                        <div className="dropdown-container">
+                            <input
+                                type="text"
+                                value={selectedFile}
+                                onChange={handleInputChange}
+                                onFocus={() => setShowDropdown(true)}
+                                onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                                placeholder="Select a file to preview..."
+                                className="file-input"
+                                disabled={isLoading}
+                            />
+                            {isLoading && <div className="loading-spinner">⏳</div>}
+                            
+                            {showDropdown && files.length > 0 && (
+                                <div className="dropdown-menu">
+                                    {files.map((file, index) => (
+                                        <div
+                                            key={index}
+                                            className="dropdown-item"
+                                            onClick={() => handleFileSelect(file)}
+                                        >
+                                            <span className="file-icon">{getFileIcon(file)}</span>
+                                            <span className="file-name">{file}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="select-group">
+                        <label className="select-label">Prompt Template:</label>
+                        <select
+                            value={selectedPrompt}
+                            onChange={(e) => handlePromptSelect(e.target.value)}
+                            className="prompt-select"
+                        >
+                            <option value="">Select a prompt template...</option>
+                            {prompts.map((prompt, index) => (
+                                <option key={index} value={prompt}>
+                                    {prompt}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {error && (
+                        <div className="error-message">
+                            <span className="error-icon">⚠️</span>
+                            {error}
+                        </div>
+                    )}
+
+                    {files.length === 0 && !isLoading && !error && (
+                        <div className="no-files-message">
+                            <span className="no-files-icon">📁</span>
+                            No files found in the project directory.
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // DiffViewer Component
+        const DiffViewer = ({ preview, onApply, onReject, onClose, showActions = true }) => {
+            const [activeTab, setActiveTab] = useState('diff');
+            const [isApplying, setIsApplying] = useState(false);
+
+            if (!preview) {
+                return (
+                    <div className="diff-viewer">
+                        <div className="diff-viewer-header">
+                            <h3>No Preview Available</h3>
+                            <button onClick={onClose} className="close-btn">×</button>
+                        </div>
+                        <div className="diff-viewer-content">
+                            <p>Select a file and prompt to generate a preview.</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            const handleApply = async () => {
+                setIsApplying(true);
+                try {
+                    await onApply(preview);
+                } catch (error) {
+                    console.error('Failed to apply injection:', error);
+                } finally {
+                    setIsApplying(false);
+                }
+            };
+
+            const renderDiff = () => {
+                if (!preview.diff) {
+                    return <p>No changes detected.</p>;
+                }
+
+                const lines = preview.diff.split('\n');
+                return (
+                    <div className="diff-content">
+                        {lines.map((line, index) => {
+                            let className = 'diff-line';
+                            if (line.startsWith('+') && !line.startsWith('+++')) {
+                                className += ' addition';
+                            } else if (line.startsWith('-') && !line.startsWith('---')) {
+                                className += ' deletion';
+                            } else if (line.startsWith('@@')) {
+                                className += ' hunk';
+                            } else if (line.startsWith('+++') || line.startsWith('---')) {
+                                className += ' file-header';
+                            }
+                            
+                            return (
+                                <div key={index} className={className}>
+                                    <span className="line-number">{index + 1}</span>
+                                    <span className="line-content">{line}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
+            const renderStats = () => {
+                if (!preview.diff_stats) {
+                    return <p>No statistics available.</p>;
+                }
+
+                const { additions, deletions, total_changes } = preview.diff_stats;
+                
+                return (
+                    <div className="stats-panel">
+                        <div className="stat-item">
+                            <span className="stat-label">Additions:</span>
+                            <span className="stat-value addition">{additions}</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-label">Deletions:</span>
+                            <span className="stat-value deletion">{deletions}</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-label">Total Changes:</span>
+                            <span className="stat-value">{total_changes}</span>
+                        </div>
+                        <div className="stat-item">
+                            <span className="stat-label">Has Changes:</span>
+                            <span className="stat-value">{preview.has_changes ? 'Yes' : 'No'}</span>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="diff-viewer">
+                    <div className="diff-viewer-header">
+                        <div className="header-info">
+                            <h3>{preview.filename}</h3>
+                            <span className="filepath">{preview.filepath}</span>
+                        </div>
+                        <div className="header-actions">
+                            {showActions && (
+                                <>
+                                    <button 
+                                        onClick={handleApply}
+                                        disabled={isApplying || !preview.has_changes}
+                                        className="apply-btn"
+                                    >
+                                        {isApplying ? 'Applying...' : '✅ Apply'}
+                                    </button>
+                                    <button 
+                                        onClick={onReject}
+                                        className="reject-btn"
+                                    >
+                                        ❌ Reject
+                                    </button>
+                                </>
+                            )}
+                            <button onClick={onClose} className="close-btn">×</button>
+                        </div>
+                    </div>
+
+                    <div className="diff-viewer-tabs">
+                        <button 
+                            className={activeTab === 'diff' ? 'active' : ''}
+                            onClick={() => setActiveTab('diff')}
+                        >
+                            Diff View
+                        </button>
+                        <button 
+                            className={activeTab === 'stats' ? 'active' : ''}
+                            onClick={() => setActiveTab('stats')}
+                        >
+                            Statistics
+                        </button>
+                    </div>
+
+                    <div className="diff-viewer-content">
+                        {activeTab === 'diff' && renderDiff()}
+                        {activeTab === 'stats' && renderStats()}
+                    </div>
+
+                    {preview.error && (
+                        <div className="error-panel">
+                            <h4>Error</h4>
+                            <p>{preview.error}</p>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Main Dashboard Component
+        const Dashboard = () => {
+            const [selectedFile, setSelectedFile] = useState('');
+            const [selectedPrompt, setSelectedPrompt] = useState('');
+            const [preview, setPreview] = useState(null);
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [wsConnected, setWsConnected] = useState(false);
+            const wsRef = useRef(null);
+
+            useEffect(() => {
+                connectWebSocket();
+                return () => {
+                    if (wsRef.current) {
+                        wsRef.current.close();
+                    }
+                };
+            }, []);
+
+            const connectWebSocket = () => {
+                const ws = new WebSocket(`ws://${window.location.host}/ws`);
+                wsRef.current = ws;
+
+                ws.onopen = () => {
+                    setWsConnected(true);
+                    console.log('WebSocket connected');
+                };
+
+                ws.onclose = () => {
+                    setWsConnected(false);
+                    console.log('WebSocket disconnected');
+                    // Reconnect after 5 seconds
+                    setTimeout(connectWebSocket, 5000);
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    setWsConnected(false);
+                };
+            };
+
+            const handleFileSelect = (filePath) => {
+                setSelectedFile(filePath);
+            };
+
+            const handlePromptSelect = (promptPath) => {
+                setSelectedPrompt(promptPath);
+            };
+
+            const generatePreview = async () => {
+                if (!selectedFile || !selectedPrompt) {
+                    setError('Please select both a file and a prompt template.');
+                    return;
+                }
+
+                setIsLoading(true);
+                setError(null);
+
+                try {
+                    const response = await fetch('/api/preview/preview', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            file_path: selectedFile,
+                            prompt_path: selectedPrompt,
+                            with_context: true
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    setPreview(result);
+
+                    // Send WebSocket notification
+                    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({
+                            type: 'preview_generated',
+                            data: { filename: result.filename, has_changes: result.has_changes }
+                        }));
+                    }
+
+                } catch (err) {
+                    console.error('Preview generation failed:', err);
+                    setError(`Failed to generate preview: ${err.message}`);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleApply = async (previewData) => {
+                try {
+                    const response = await fetch('/api/apply/apply', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            file_path: previewData.filepath,
+                            injected_content: previewData.after
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert(`✅ Successfully applied changes to ${result.filename}`);
+                        setPreview(null);
+                        
+                        // Send WebSocket notification
+                        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                            wsRef.current.send(JSON.stringify({
+                                type: 'injection_applied',
+                                data: { filename: result.filename, backup_created: result.backup_created }
+                            }));
+                        }
+                    } else {
+                        throw new Error(result.error || 'Apply failed');
+                    }
+
+                } catch (err) {
+                    console.error('Apply failed:', err);
+                    alert(`❌ Failed to apply changes: ${err.message}`);
+                }
+            };
+
+            const handleReject = (previewData) => {
+                setPreview(null);
+                console.log('Preview rejected for:', previewData.filename);
+            };
+
+            const handleClosePreview = () => {
+                setPreview(null);
+            };
+
+            return (
+                <div className="dashboard">
+                    <header className="dashboard-header">
+                        <h1>🚀 SurgiInject Dashboard</h1>
+                        <div className="status-indicators">
+                            <span className={`ws-status ${wsConnected ? 'connected' : 'disconnected'}`}>
+                                {wsConnected ? '🔗 Connected' : '🔌 Disconnected'}
+                            </span>
+                        </div>
+                    </header>
+
+                    <main className="dashboard-main">
+                        <section className="control-panel">
+                            <h2>Injection Preview</h2>
+                            <FileSelectDropdown
+                                onFileSelect={handleFileSelect}
+                                onPromptSelect={handlePromptSelect}
+                                projectRoot="."
+                            />
+                            
+                            <div className="action-buttons">
+                                <button
+                                    onClick={generatePreview}
+                                    disabled={!selectedFile || !selectedPrompt || isLoading}
+                                    className="preview-btn"
+                                >
+                                    {isLoading ? '🔄 Generating Preview...' : '🔍 Generate Preview'}
+                                </button>
+                            </div>
+
+                            {error && (
+                                <div className="error-message">
+                                    <span className="error-icon">⚠️</span>
+                                    {error}
+                                </div>
+                            )}
+                        </section>
+
+                        {preview && (
+                            <section className="preview-panel">
+                                <DiffViewer
+                                    preview={preview}
+                                    onApply={handleApply}
+                                    onReject={handleReject}
+                                    onClose={handleClosePreview}
+                                    showActions={true}
+                                />
+                            </section>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        // Render the dashboard
+        ReactDOM.render(<Dashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html> 

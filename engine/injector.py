@@ -7,17 +7,28 @@ Handles the main injection workflow:
 3. Return modified code
 """
 
-import logging
 import os
+import sys
 import json
 import hashlib
+import logging
+from datetime import datetime
+from typing import Optional, Dict, Any
 from dotenv import load_dotenv, find_dotenv
 import requests
+from pathlib import Path
 load_dotenv(find_dotenv())
+
+# Get the project root directory (where this file is located)
+PROJECT_ROOT = Path(__file__).parent.parent
+LOGS_DIR = PROJECT_ROOT / "logs"
+
+# Ensure logs directory exists
+LOGS_DIR.mkdir(exist_ok=True)
 
 # Configure logging first
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
-    logging.FileHandler("logs/injection.log"),
+    logging.FileHandler(str(LOGS_DIR / "injection.log")),
     logging.StreamHandler()
 ])
 logger = logging.getLogger(__name__)
@@ -33,7 +44,6 @@ if not ANTHROPIC_API_KEY:
 if not GROQ_API_KEY:
     logger.warning(" Groq API key not found. Groq provider will be skipped.")
 
-from typing import Optional, Dict, Any
 from .prompty import build_prompt
 from .quality import is_response_weak, should_escalate, get_escalation_prompt
 from models.mistral_client import run_model

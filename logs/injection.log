@@ -34,3 +34,22 @@
 2025-06-13 15:59:22,220 - INFO - AI model processing completed
 2025-06-13 15:59:22,220 - WARNING - Weak response detected, attempting escalation...
 2025-06-13 15:59:22,220 - ERROR - Injection process failed: 'NoneType' object is not subscriptable
+2025-06-13 22:39:36,643 - ERROR - Failed to read prompt prompts/landing_page.txt: [Errno 2] No such file or directory: 'prompts/landing_page.txt'
+2025-06-13 22:39:45,113 - INFO - Starting injection process...
+2025-06-13 22:39:45,114 - INFO - Injection Event: start - python_test.py
+2025-06-13 22:39:45,115 - INFO - Building formatted prompt...
+2025-06-13 22:39:45,117 - INFO - Prompt built successfully (length: 2088 chars)
+2025-06-13 22:39:45,117 - INFO - Selected provider: anthropic
+2025-06-13 22:39:45,118 - INFO - Sending to AI model...
+2025-06-13 22:39:45,119 - INFO - Trying provider: anthropic
+2025-06-13 22:39:45,977 - ERROR - Anthropic API call failed: 400 Client Error: Bad Request for url: https://api.anthropic.com/v1/messages
+2025-06-13 22:39:45,978 - WARNING - anthropic returned empty response
+2025-06-13 22:39:45,979 - INFO - Trying provider: groq
+2025-06-13 22:39:50,054 - INFO - groq success - Tokens used: 1518
+2025-06-13 22:39:50,055 - INFO - AI model processing completed
+2025-06-13 22:39:50,056 - INFO - Injection process completed successfully
+2025-06-13 22:39:50,056 - INFO - Injection Event: success - python_test.py
+2025-06-13 22:42:57,252 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
+2025-06-13 22:42:57,253 - WARNING -  Groq API key not found. Groq provider will be skipped.
+2025-06-13 22:45:21,737 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
+2025-06-13 22:45:21,738 - WARNING -  Groq API key not found. Groq provider will be skipped.
