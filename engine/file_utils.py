@@ -203,16 +203,77 @@ def get_file_stats(file_path: Path) -> dict:
     """
     try:
         stat = file_path.stat()
-        content = safe_read_file(file_path)
-        
         return {
             'size': stat.st_size,
-            'lines': len(content.split('\n')) if content else 0,
+            'size_mb': stat.st_size / (1024 * 1024),
             'modified': stat.st_mtime,
-            'encoding': get_file_encoding(file_path)
+            'created': stat.st_ctime
         }
-    except Exception:
+    except Exception as e:
+        print(f"Error getting stats for {file_path}: {e}")
         return {}
+
+def get_file_size_mb(file_path: Path) -> float:
+    """
+    Get file size in megabytes
+    
+    Args:
+        file_path: Path to the file
+        
+    Returns:
+        File size in MB
+    """
+    try:
+        return file_path.stat().st_size / (1024 * 1024)
+    except Exception as e:
+        print(f"Error getting size for {file_path}: {e}")
+        return 0.0
+
+def load_prompt(prompt_path: str) -> str:
+    """
+    Load prompt text from a file with proper encoding detection
+    
+    Args:
+        prompt_path: Path to the prompt file
+        
+    Returns:
+        Prompt text as string
+        
+    Raises:
+        FileNotFoundError: If prompt file doesn't exist
+        Exception: If file cannot be read
+    """
+    prompt_file = Path(prompt_path)
+    
+    if not prompt_file.exists():
+        raise FileNotFoundError(f"Prompt file not found: {prompt_path}")
+    
+    try:
+        encoding = get_file_encoding(prompt_file)
+        with open(prompt_file, 'r', encoding=encoding) as f:
+            return f.read()
+    except Exception as e:
+        raise Exception(f"Could not read prompt file {prompt_path}: {e}")
+
+def save_output(original_path: str, response: str) -> str:
+    """
+    Save injection response to a .surgiout file
+    
+    Args:
+        original_path: Path to the original file
+        response: AI response to save
+        
+    Returns:
+        Path to the saved output file
+    """
+    try:
+        out_path = f"{original_path}.surgiout"
+        with open(out_path, "w", encoding="utf-8") as f:
+            f.write(response)
+        return out_path
+    except Exception as e:
+        print(f"Error saving output to {out_path}: {e}")
+        raise
 
 def filter_files_by_size(files: List[Path], max_size_mb: float = 10.0) -> List[Path]:
     """

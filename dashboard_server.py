@@ -12,10 +12,220 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 from threading import Thread
 import os
 from datetime import datetime
+from urllib.parse import urlparse, parse_qs
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+class InjectionDiffsHandler(SimpleHTTPRequestHandler):
+    """Enhanced HTTP handler with injection diffs API endpoints"""
+    
+    def do_GET(self):
+        """Handle GET requests for injection diffs API"""
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        
+        # Handle injection diffs API endpoints
+        if path == '/api/injection-diffs':
+            self.handle_injection_diffs()
+            return
+        elif path == '/api/injection-stats':
+            self.handle_injection_stats()
+            return
+        elif path.startswith('/api/approve-injection/'):
+            injection_id = path.split('/')[-1]
+            self.handle_approve_injection(injection_id)
+            return
+        elif path.startswith('/api/reject-injection/'):
+            injection_id = path.split('/')[-1]
+            self.handle_reject_injection(injection_id)
+            return
+        elif path == '/api/approve-all-strong':
+            self.handle_approve_all_strong()
+            return
+        elif path == '/api/clear-queue':
+            params = parse_qs(parsed_url.query)
+            queue_type = params.get('type', ['pending'])[0]
+            self.handle_clear_queue(queue_type)
+            return
+        
+        # Default to serving static files
+        super().do_GET()
+    
+    def handle_injection_diffs(self):
+        """Handle GET /api/injection-diffs"""
+        try:
+            from engine.injection_queue import get_pending_injections
+            
+            injections = get_pending_injections()
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            self.end_headers()
+            
+            response = {
+                "status": "success",
+                "data": injections,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            logger.error(f"Error handling injection diffs: {e}")
+            self.send_error_response(500, f"Internal server error: {str(e)}")
+    
+    def handle_injection_stats(self):
+        """Handle GET /api/injection-stats"""
+        try:
+            from engine.injection_queue import get_injection_stats
+            
+            stats = get_injection_stats()
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            response = {
+                "status": "success",
+                "data": stats,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            logger.error(f"Error handling injection stats: {e}")
+            self.send_error_response(500, f"Internal server error: {str(e)}")
+    
+    def handle_approve_injection(self, injection_id):
+        """Handle GET /api/approve-injection/{id}"""
+        try:
+            from engine.injection_queue import approve_injection
+            
+            success = approve_injection(injection_id)
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            response = {
+                "status": "success" if success else "error",
+                "message": f"Injection {'approved' if success else 'not found'}",
+                "injection_id": injection_id,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            logger.error(f"Error approving injection: {e}")
+            self.send_error_response(500, f"Internal server error: {str(e)}")
+    
+    def handle_reject_injection(self, injection_id):
+        """Handle GET /api/reject-injection/{id}"""
+        try:
+            from engine.injection_queue import reject_injection
+            
+            success = reject_injection(injection_id)
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            response = {
+                "status": "success" if success else "error",
+                "message": f"Injection {'rejected' if success else 'not found'}",
+                "injection_id": injection_id,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            logger.error(f"Error rejecting injection: {e}")
+            self.send_error_response(500, f"Internal server error: {str(e)}")
+    
+    def handle_approve_all_strong(self):
+        """Handle GET /api/approve-all-strong"""
+        try:
+            from engine.injection_queue import approve_all_strong_injections
+            
+            approved_count = approve_all_strong_injections()
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            response = {
+                "status": "success",
+                "message": f"Approved {approved_count} strong injections",
+                "approved_count": approved_count,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            logger.error(f"Error approving all strong injections: {e}")
+            self.send_error_response(500, f"Internal server error: {str(e)}")
+    
+    def handle_clear_queue(self, queue_type):
+        """Handle GET /api/clear-queue?type={queue_type}"""
+        try:
+            from engine.injection_queue import injection_queue
+            
+            cleared_count = injection_queue.clear_queue(queue_type)
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            
+            response = {
+                "status": "success",
+                "message": f"Cleared {cleared_count} items from {queue_type} queue",
+                "cleared_count": cleared_count,
+                "queue_type": queue_type,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            
+        except Exception as e:
+            logger.error(f"Error clearing queue: {e}")
+            self.send_error_response(500, f"Internal server error: {str(e)}")
+    
+    def send_error_response(self, status_code, message):
+        """Send error response"""
+        self.send_response(status_code)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+        
+        response = {
+            "status": "error",
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        self.wfile.write(json.dumps(response).encode('utf-8'))
+    
+    def do_OPTIONS(self):
+        """Handle CORS preflight requests"""
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
 
 class DashboardWebSocketServer:
     def __init__(self, host='localhost', port=8766):
@@ -72,6 +282,7 @@ class DashboardWebSocketServer:
     
     async def websocket_endpoint(self, websocket, path):
         """FastAPI-style WebSocket endpoint for persistent real-time logging"""
+        # Accept all connections regardless of path
         await self.register_client(websocket)
         
         try:
@@ -109,14 +320,17 @@ class DashboardWebSocketServer:
         """Start the WebSocket server with FastAPI-style handler"""
         logger.info(f"Starting WebSocket server on ws://{self.host}:{self.port}")
         
-        # Create a wrapper function for the websockets library that properly handles the path
+        # Create a wrapper function for the websockets library that accepts all paths
         async def handler(websocket, path):
-            # Call our websocket endpoint with both websocket and path
+            # Accept all paths - no validation
             await self.websocket_endpoint(websocket, path)
         
-        async with websockets.serve(handler, self.host, self.port):
-            logger.info("WebSocket server started successfully")
-            await asyncio.Future()  # Run forever
+        # Start server with no path restrictions
+        server = await websockets.serve(handler, self.host, self.port)
+        logger.info("WebSocket server started successfully")
+        
+        # Keep server running
+        await server.wait_closed()
     
     def run(self):
         """Run the server"""
@@ -140,7 +354,7 @@ class DashboardHTTPServer:
                 os.chdir('dashboard')
                 
                 # Create server
-                server = HTTPServer((self.host, self.port), SimpleHTTPRequestHandler)
+                server = HTTPServer((self.host, self.port), InjectionDiffsHandler)
                 logger.info(f"HTTP server started on http://{self.host}:{self.port}")
                 server.serve_forever()
             except Exception as e:

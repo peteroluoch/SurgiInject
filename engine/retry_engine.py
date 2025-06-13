@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 
 from .response_validator import validator, is_weak_response, log_failure, auto_correct_prompt, get_optimal_provider_chain
+from .injection_queue import add_injection_result
 
 logger = logging.getLogger(__name__)
 
@@ -73,10 +74,14 @@ class RetryEngine:
                         continue
                     
                     # Query the model
+                    # Remove provider from kwargs to avoid conflict
+                    call_kwargs = kwargs.copy()
+                    call_kwargs.pop('provider', None)
+                    
                     response = query_model_func(
                         prompt=current_prompt,
                         provider=provider,
-                        **kwargs
+                        **call_kwargs
                     )
                     
                     # Validate the response
@@ -231,7 +236,41 @@ def inject_with_retry(file_path: str,
                      provider_chain: Optional[List[str]] = None,
                      **kwargs) -> str:
     """Convenience function for injection with retry."""
-    return retry_engine.inject_with_retry(file_path, prompt, query_model_func, provider_chain, **kwargs)
+    # Read original content for queue
+    original_content = ""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            original_content = f.read()
+    except Exception as e:
+        logger.warning(f"Could not read original content for queue: {e}")
+    
+    # Run injection with retry
+    result = retry_engine.inject_with_retry(file_path, prompt, query_model_func, provider_chain, **kwargs)
+    
+    # Add to injection queue for dashboard preview
+    try:
+        # Determine status based on response quality
+        status = "success"
+        if is_weak_response(result):
+            status = "weak"
+        
+        # Determine provider (simplified - could be enhanced)
+        provider = "retry-engine"
+        if provider_chain and len(provider_chain) > 0:
+            provider = provider_chain[0]
+        
+        add_injection_result(
+            file_path=file_path,
+            original_content=original_content,
+            injected_content=result,
+            status=status,
+            provider=provider,
+            with_context=False  # Single file injections don't use context
+        )
+    except Exception as e:
+        logger.warning(f"Failed to add injection result to queue: {e}")
+    
+    return result
 
 
 def inject_with_fallback(file_path: str, 

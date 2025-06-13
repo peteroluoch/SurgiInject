@@ -1,0 +1,69 @@
+{
+  "dependency_graph": {
+    "test_project\\config.py": [],
+    "test_project\\main.py": [
+      "test_project\\utils.py",
+      "test_project\\config.py",
+      "test_project\\models\\user.py"
+    ],
+    "test_project\\models\\__init__.py": [],
+    "test_project\\models\\user.py": [],
+    "test_project\\prompt.txt": [],
+    "test_project\\utils.py": [
+      "test_project\\config.py"
+    ]
+  },
+  "injection_order": [
+    "test_project\\config.py",
+    "test_project\\models\\user.py",
+    "test_project\\models\\__init__.py",
+    "test_project\\prompt.txt",
+    "test_project\\utils.py",
+    "test_project\\main.py"
+  ],
+  "file_metadata": {
+    "test_project\\config.py": {
+      "size": 319,
+      "modified": 1749850830.5363152,
+      "extension": ".py",
+      "dependencies": []
+    },
+    "test_project\\main.py": {
+      "size": 693,
+      "modified": 1749850808.8856404,
+      "extension": ".py",
+      "dependencies": [
+        "test_project\\utils.py",
+        "test_project\\config.py",
+        "test_project\\models\\user.py"
+      ]
+    },
+    "test_project\\models\\__init__.py": {
+      "size": 46,
+      "modified": 1749850847.590165,
+      "extension": ".py",
+      "dependencies": []
+    },
+    "test_project\\models\\user.py": {
+      "size": 534,
+      "modified": 1749850857.7279005,
+      "extension": ".py",
+      "dependencies": []
+    },
+    "test_project\\prompt.txt": {
+      "size": 193,
+      "modified": 1749850874.200554,
+      "extension": ".txt",
+      "dependencies": []
+    },
+    "test_project\\utils.py": {
+      "size": 475,
+      "modified": 1749850821.3632872,
+      "extension": ".py",
+      "dependencies": [
+        "test_project\\config.py"
+      ]
+    }
+  },
+  "generated_at": "2025-06-14T00:41:18.083299"
+}

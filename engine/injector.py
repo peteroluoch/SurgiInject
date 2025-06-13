@@ -3,7 +3,7 @@ Core injection engine for SurgiInject
 
 Handles the main injection workflow:
 1. Format prompt using prompty module
-2. Send to AI model
+2. Send to AI model with smart retry logic
 3. Return modified code
 """
 
@@ -46,6 +46,8 @@ if not GROQ_API_KEY:
 
 from .prompty import build_prompt
 from .quality import is_response_weak, should_escalate, get_escalation_prompt
+from .retry_engine import inject_with_retry, inject_with_fallback, get_retry_stats
+from .response_validator import is_weak_response, log_failure
 from models.mistral_client import run_model
 from inject_logger import injection_logger
 
@@ -90,7 +92,7 @@ def run_injection_from_files(source_path: str, prompt_path: str) -> str:
 
 def run_injection(source_code: str, prompt_template: str, file_path: Optional[str] = None, provider: str = 'auto', force: bool = False) -> str:
     """
-    Run the injection process with enhanced error handling and escalation.
+    Run the injection process with smart retry logic and failure handling.
     
     Args:
         source_code (str): The source code to modify
@@ -144,41 +146,47 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
         
         logger.info(f"Prompt built successfully (length: {len(formatted_prompt)} chars)")
         
-        # Handle provider selection
-        if provider == 'auto':
-            provider = auto_select_provider()
-        logger.info(f"Selected provider: {provider}")
+        # Step 2: Use smart retry engine for AI model interaction
+        logger.info("Using smart retry engine for AI model interaction...")
         
-        # Step 2: Send to AI model with enhanced error handling
-        logger.info("Sending to AI model...")
-        modified_code = handle_injection(formatted_prompt, source_code)
-        
-        logger.info("AI model processing completed")
-        
-        # Step 3: Quality assessment and escalation with safe handling
-        if is_response_weak(modified_code):
-            logger.warning("Weak response detected, attempting escalation...")
-            escalation_prompt = get_escalation_prompt(formatted_prompt, modified_code)
+        def query_model_wrapper(prompt: str, provider: str, **kwargs) -> str:
+            """Wrapper function for querying AI models."""
             try:
-                escalated_response = run_model(escalation_prompt)
-                if escalated_response and escalated_response.strip():
-                    modified_code = escalated_response
-                    logger.info("Escalation completed successfully")
-                    # Emit escalation event
-                    injection_logger.emit_escalation(
-                        target_file=file_path or "unknown_file",
-                        provider=provider,
-                        escalation_provider="escalation_model"
-                    )
-                else:
-                    logger.warning("Escalation returned empty response, keeping original")
+                # Handle provider selection
+                if provider == 'auto':
+                    provider = auto_select_provider()
+                
+                logger.info(f"Querying {provider} with prompt...")
+                response = run_model(prompt)
+                
+                if not response or not response.strip():
+                    raise ValueError("Empty response from model")
+                
+                return response
+                
             except Exception as e:
-                logger.error(f"Escalation failed: {e}")
-                logger.warning("Keeping original response due to escalation failure")
+                logger.error(f"Error querying {provider}: {e}")
+                raise
         
-        # Step 4: Final validation
+        # Use retry engine with fallback
+        modified_code = inject_with_fallback(
+            file_path=file_path,
+            prompt=formatted_prompt,
+            query_model_func=query_model_wrapper,
+            fallback_content=source_code,  # Return original if all attempts fail
+            provider=provider
+        )
+        
+        logger.info("AI model processing completed with retry logic")
+        
+        # Step 3: Final validation
         if not modified_code or not modified_code.strip():
             logger.warning("AI model returned empty response, returning original code")
+            return source_code
+        
+        # Validate that we got a meaningful response
+        if is_weak_response(modified_code):
+            logger.warning("Weak response detected, returning original code")
             return source_code
             
         logger.info("Injection process completed successfully")
@@ -200,10 +208,12 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
         injection_logger.emit_error(
             target_file=file_path or "unknown_file",
             provider=provider,
-            error=str(e)
+            error_message=str(e)
         )
         
-        return f"[Injection failed: {str(e)}. Please try again later.]"
+        # Return original code as fallback
+        logger.warning("Returning original code due to injection failure")
+        return source_code
 
 def validate_code_structure(original: str, modified: str) -> bool:
     """

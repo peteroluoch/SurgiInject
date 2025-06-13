@@ -1,0 +1,11 @@
+# Welcome to Our Platform
+
+This is a basic landing page that needs marketing enhancement.
+
+## Features
+- Fast performance
+- Easy to use
+- Reliable
+
+## Contact
+Get in touch with us for more information. 

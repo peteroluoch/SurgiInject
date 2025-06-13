@@ -16,6 +16,14 @@ from engine.backup_engine import create_backup, list_backups, restore_backup, re
 from datetime import datetime
 import chardet
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    print("✅ Environment variables loaded from .env file")
+except ImportError:
+    print("⚠️  python-dotenv not available, environment variables may not be loaded")
+
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
     logging.FileHandler("logs/cli.log"),
@@ -214,11 +222,188 @@ def inject(file, prompt, apply, preview_only, with_context, coordinated, provide
             
             return 0
             
-    except FileNotFoundError as e:
-        click.echo(f"❌ File not found: {e}", err=True)
-        return 1
     except Exception as e:
         click.echo(f"❌ Injection failed: {e}", err=True)
+        logger.error(f"Injection failed for {file}: {e}")
+        return 1
+
+@cli.command()
+@click.argument("directory", type=click.Path(exists=True))
+@click.option("--prompt", required=True, help="Path to prompt file")
+@click.option("--extensions", "-e", multiple=True, default=[".py", ".js", ".ts", ".html", ".md", ".txt"], help="File extensions to process")
+@click.option("--recursive", "-r", is_flag=True, default=True, help="Process subdirectories recursively")
+@click.option("--apply", "-a", is_flag=True, help="Apply changes to files (default: preview only)")
+@click.option("--with-context", is_flag=True, help="Include dependency context for better AI understanding")
+@click.option("--provider-chain", multiple=True, default=["anthropic", "groq", "fallback"], help="AI providers to try in order")
+@click.option("--max-size", default=10.0, help="Maximum file size in MB to process")
+@click.option("--exclude", multiple=True, help="Directories to exclude (e.g., __pycache__, .git)")
+@click.option("--verbose", "-v", is_flag=True, help="Enable verbose logging")
+# Phase 6.9: New dependency tracking options
+@click.option("--track-deps", is_flag=True, help="Analyze and honor file dependencies")
+@click.option("--context-depth", default=3, help="How deep to go in dependency context")
+@click.option("--skip-known", is_flag=True, help="Skip files with cached strong results")
+@click.option("--split-large", is_flag=True, help="Auto-chunk large files to fit token limits")
+@click.option("--save-deps", is_flag=True, help="Save dependency map to .injectmap.json")
+@click.option("--load-deps", help="Load dependency map from file")
+def inject_dir(directory, prompt, extensions, recursive, apply, with_context, provider_chain, max_size, exclude, verbose, track_deps, context_depth, skip_known, split_large, save_deps, load_deps):
+    """Inject AI-generated code into all files in a directory"""
+    try:
+        if verbose:
+            logging.getLogger().setLevel(logging.DEBUG)
+        
+        click.echo(f"🚀 Starting directory injection for: {directory}")
+        click.echo(f"📁 Extensions: {', '.join(extensions)}")
+        click.echo(f"🧠 Context-aware: {'Yes' if with_context else 'No'}")
+        click.echo(f"🔗 Track dependencies: {'Yes' if track_deps else 'No'}")
+        
+        # Phase 6.9: Load or build dependency graph
+        dependency_graph = {}
+        if track_deps:
+            from engine.dependency_tracker import dependency_tracker
+            
+            if load_deps:
+                click.echo(f"📋 Loading dependency map from: {load_deps}")
+                if dependency_tracker.load_dependency_map(load_deps):
+                    dependency_graph = dependency_tracker.dependency_graph
+                    click.echo(f"✅ Loaded dependency map with {len(dependency_graph)} files")
+                else:
+                    click.echo("⚠️  Failed to load dependency map, building new one")
+                    dependency_graph = dependency_tracker.build_dependency_graph(directory, extensions)
+            else:
+                click.echo("🔍 Building dependency graph...")
+                dependency_graph = dependency_tracker.build_dependency_graph(directory, extensions)
+            
+            if save_deps:
+                dependency_tracker.save_dependency_map()
+        
+        # Use enhanced recursive engine for Phase 6.9
+        from engine.recursive_enhanced import inject_directory_enhanced
+        
+        result = inject_directory_enhanced(
+            directory=directory,
+            prompt_path=prompt,
+            extensions=extensions,
+            recursive=recursive,
+            apply=apply,
+            with_context=with_context,
+            provider_chain=provider_chain,
+            max_size=max_size,
+            exclude=exclude,
+            track_deps=track_deps,
+            context_depth=context_depth,
+            skip_known=skip_known,
+            split_large=split_large,
+            dependency_graph=dependency_graph
+        )
+        
+        if result["success"]:
+            click.echo(f"✅ Directory injection completed successfully!")
+            click.echo(f"📊 Files processed: {result['total_files']}")
+            click.echo(f"✅ Successful: {result['successful_injections']}")
+            click.echo(f"❌ Failed: {result['failed_injections']}")
+            click.echo(f"⏭️  Skipped: {result['skipped_files']}")
+            
+            if track_deps:
+                click.echo(f"🔗 Dependency-aware injection: {result.get('dependency_aware', False)}")
+                click.echo(f"🧠 Context depth used: {context_depth}")
+            
+            if split_large:
+                click.echo(f"✂️  Large files split: {result.get('files_split', 0)}")
+            
+            if result.get("injected_files"):
+                click.echo("\n📁 Injected files:")
+                for injected_file in result["injected_files"]:
+                    click.echo(f"  ✅ {injected_file}")
+            
+            if result.get("skipped_files_list"):
+                click.echo("\n⏭️  Skipped files:")
+                for skipped_file in result["skipped_files_list"]:
+                    click.echo(f"  ⏭️  {skipped_file}")
+            
+            return 0
+        else:
+            click.echo(f"❌ Directory injection failed: {result.get('error', 'Unknown error')}", err=True)
+            return 1
+            
+    except Exception as e:
+        click.echo(f"❌ Directory injection failed: {e}", err=True)
+        logger.error(f"Directory injection failed for {directory}: {e}")
+        return 1
+
+@cli.command()
+@click.argument("directory", type=click.Path(exists=True))
+@click.option("--extensions", "-e", multiple=True, default=[".py", ".js", ".ts", ".html", ".css", ".md"], help="File extensions to analyze")
+@click.option("--output", "-o", default=".injectmap.json", help="Output file for dependency map")
+@click.option("--visualize", is_flag=True, help="Generate a visual representation of dependencies")
+@click.option("--verbose", "-v", is_flag=True, help="Show detailed dependency analysis")
+def track_deps(directory, extensions, output, visualize, verbose):
+    """Analyze and track file dependencies in a directory"""
+    try:
+        from engine.dependency_tracker import dependency_tracker
+        
+        click.echo(f"🔍 Analyzing dependencies in: {directory}")
+        click.echo(f"📁 Extensions: {', '.join(extensions)}")
+        
+        # Build dependency graph
+        dependency_graph = dependency_tracker.build_dependency_graph(directory, extensions)
+        
+        # Save dependency map
+        dependency_tracker.save_dependency_map(output)
+        
+        # Display analysis results
+        click.echo(f"\n📊 Dependency Analysis Results:")
+        click.echo(f"📁 Total files: {len(dependency_graph)}")
+        
+        # Count dependencies
+        total_deps = sum(len(deps) for deps in dependency_graph.values())
+        avg_deps = total_deps / len(dependency_graph) if dependency_graph else 0
+        
+        click.echo(f"🔗 Total dependencies: {total_deps}")
+        click.echo(f"📈 Average dependencies per file: {avg_deps:.1f}")
+        
+        # Show injection order
+        if dependency_tracker.injection_order:
+            click.echo(f"\n🔄 Recommended injection order:")
+            for i, file_path in enumerate(dependency_tracker.injection_order[:10], 1):
+                click.echo(f"  {i:2d}. {file_path}")
+            if len(dependency_tracker.injection_order) > 10:
+                click.echo(f"  ... and {len(dependency_tracker.injection_order) - 10} more files")
+        
+        # Show files with most dependencies
+        if verbose:
+            files_by_deps = sorted(
+                [(file, len(deps)) for file, deps in dependency_graph.items()],
+                key=lambda x: x[1],
+                reverse=True
+            )
+            
+            click.echo(f"\n🔝 Files with most dependencies:")
+            for file_path, dep_count in files_by_deps[:5]:
+                click.echo(f"  📁 {file_path} ({dep_count} deps)")
+                if dep_count > 0:
+                    for dep in dependency_graph[file_path][:3]:
+                        click.echo(f"    └─ {dep}")
+                    if len(dependency_graph[file_path]) > 3:
+                        click.echo(f"    └─ ... and {len(dependency_graph[file_path]) - 3} more")
+        
+        # Generate visualization if requested
+        if visualize:
+            try:
+                from engine.dependency_visualizer import generate_dependency_graph
+                viz_file = generate_dependency_graph(dependency_graph, directory)
+                click.echo(f"\n📊 Dependency visualization saved to: {viz_file}")
+            except ImportError:
+                click.echo("⚠️  Visualization requires additional dependencies (matplotlib, networkx)")
+        
+        click.echo(f"\n✅ Dependency analysis complete!")
+        click.echo(f"💾 Dependency map saved to: {output}")
+        click.echo(f"💡 Use 'inject-dir {directory} --track-deps --load-deps {output}' for dependency-aware injection")
+        
+        return 0
+        
+    except Exception as e:
+        click.echo(f"❌ Dependency analysis failed: {e}", err=True)
+        logger.error(f"Dependency analysis failed for {directory}: {e}")
         return 1
 
 @cli.command()
@@ -327,133 +512,6 @@ def backups(stats, cleanup, file):
     except Exception as e:
         click.echo(f"❌ Backup management failed: {e}", err=True)
         return 1
-
-@cli.command()
-@click.option('--path', '-p', required=True, help='Path to directory to process')
-@click.option('--prompt', '-pr', required=True, help='Path to prompt template file')
-@click.option('--extensions', '-e', multiple=True, default=['.py', '.html', '.js', '.css', '.txt'], help='File extensions to process')
-@click.option('--recursive', '-r', is_flag=True, default=True, help='Process subdirectories recursively')
-@click.option('--apply', '-a', is_flag=True, help='Apply changes to files (default: show diffs only)')
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
-@click.option('--max-size', default=10.0, help='Maximum file size in MB to process')
-@click.option('--exclude', multiple=True, help='Directories to exclude (e.g., __pycache__, .git)')
-@click.option('--with-context', is_flag=True, help='Include dependency context for Python files')
-@click.option('--project-root', help='Root directory of the project for context analysis')
-def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, exclude, with_context, project_root):
-    """
-    Inject AI-powered modifications into all files in a directory.
-    
-    This command processes multiple files recursively, applying the same prompt
-    to each file that matches the specified extensions.
-    
-    When --with-context is used, Python files will include dependency context
-    from imported modules to provide better AI understanding of the codebase.
-    """
-    
-    try:
-        # Validate directory
-        if not os.path.exists(path):
-            click.echo(f"❌ Error: Directory '{path}' not found", err=True)
-            sys.exit(1)
-            
-        if not os.path.isdir(path):
-            click.echo(f"❌ Error: '{path}' is not a directory", err=True)
-            sys.exit(1)
-            
-        # Validate prompt file
-        if not os.path.exists(prompt):
-            click.echo(f"❌ Error: Prompt file '{prompt}' not found", err=True)
-            sys.exit(1)
-            
-        click.echo(f"🚀 Starting directory injection in: {path}")
-        click.echo(f"📁 Extensions: {list(extensions)}")
-        click.echo(f"🔄 Recursive: {recursive}")
-        click.echo(f"💾 Apply changes: {apply}")
-        click.echo(f"🧠 With context: {with_context}")
-        
-        if with_context:
-            project_root_path = project_root if project_root else path
-            click.echo(f"📂 Project root for context: {project_root_path}")
-        
-        # Set default exclusions if none provided
-        if not exclude:
-            exclude = ['__pycache__', '.git', '.venv', 'node_modules', '.pytest_cache']
-            
-        # Run directory injection
-        results = inject_dir(
-            path=path,
-            prompt_path=prompt,
-            extensions=list(extensions),
-            recursive=recursive,
-            with_context=with_context,
-            project_root=project_root
-        )
-        
-        # Display results
-        click.echo(f"\n🎯 Injection Results:")
-        click.echo(f"📊 Total files processed: {len(results['injected']) + len(results['skipped']) + len(results['failed'])}")
-        click.echo(f"✅ Successfully injected: {len(results['injected'])}")
-        click.echo(f"⏭️ Skipped (already injected): {len(results['skipped'])}")
-        click.echo(f"❌ Failed: {len(results['failed'])}")
-        
-        if with_context:
-            context_files = [f for f in results['injected'] if f.endswith('.py')]
-            click.echo(f"🧠 Context-aware injections: {len(context_files)}")
-        
-        if results['failed']:
-            click.echo(f"\n❌ Failed files:")
-            for failed in results['failed']:
-                click.echo(f"   - {failed}")
-                
-        if results['injected']:
-            click.echo(f"\n✅ Successfully injected:")
-            for success in results['injected']:
-                context_indicator = " 🧠" if with_context and success.endswith('.py') else ""
-                click.echo(f"   - {success}{context_indicator}")
-                
-        if results['skipped']:
-            click.echo(f"\n⏭️ Skipped (already had marker):")
-            for skipped in results['skipped']:
-                click.echo(f"   - {skipped}")
-                
-        # Log summary
-        logger.info(f"Directory injection complete: {len(results['injected'])}/{len(results['injected']) + len(results['skipped']) + len(results['failed'])} files processed in {path}")
-        
-    except KeyboardInterrupt:
-        click.echo("\n⚠️  Operation cancelled by user")
-        sys.exit(1)
-    except Exception as e:
-        click.echo(f"❌ Unexpected error: {e}", err=True)
-        sys.exit(1)
-
-# Function to read input file with encoding detection
-def read_input_file(path):
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except UnicodeDecodeError as e:
-        print(f"⚠️ UTF-8 decoding failed for {path}: {e}")
-        # Attempt to detect encoding
-        try:
-            with open(path, 'rb') as f:
-                raw = f.read()
-                detected = chardet.detect(raw)
-                fallback_encoding = detected.get("encoding", "utf-8")
-                print(f"🔍 Detected fallback encoding: {fallback_encoding}")
-                return raw.decode(fallback_encoding, errors="replace")
-        except Exception as inner_e:
-            print(f"❌ Failed to read file with fallback encoding: {inner_e}")
-            raise RuntimeError(f"Unable to read file: {path}")
-
-# Function to check for duplicate prompts
-def is_duplicate(prompt_hash):
-    # Use SQLite or JSON to track hashes
-    return False
-
-# Function to auto-select provider
-def auto_select_provider():
-    # Implement provider selection logic
-    return 'anthropic'
 
 @cli.command()
 @click.option('--stats', '-s', is_flag=True, help='Show retry and failure statistics')
