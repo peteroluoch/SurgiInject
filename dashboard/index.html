@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SurgiInject Dashboard - Real-Time Injection Monitor</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .logs-container {
+            grid-column: 1 / -1;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .log-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            border-left: 4px solid #ddd;
+            background: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+
+        .log-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .log-item.start { border-left-color: #007bff; }
+        .log-item.success { border-left-color: #28a745; }
+        .log-item.error { border-left-color: #dc3545; }
+        .log-item.cache_hit { border-left-color: #ffc107; }
+        .log-item.escalation { border-left-color: #fd7e14; }
+        .log-item.fallback { border-left-color: #6f42c1; }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .log-status {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: white;
+        }
+
+        .log-status.start { background: #007bff; }
+        .log-status.success { background: #28a745; }
+        .log-status.error { background: #dc3545; }
+        .log-status.cache_hit { background: #ffc107; color: #212529; }
+        .log-status.escalation { background: #fd7e14; }
+        .log-status.fallback { background: #6f42c1; }
+
+        .log-timestamp {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .log-details {
+            font-size: 0.9rem;
+            color: #333;
+        }
+
+        .log-file {
+            font-weight: bold;
+            color: #007bff;
+        }
+
+        .log-provider {
+            color: #28a745;
+            font-weight: 500;
+        }
+
+        .log-tokens {
+            color: #fd7e14;
+            font-weight: 500;
+        }
+
+        .log-error {
+            color: #dc3545;
+            font-style: italic;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        .connected { background: #28a745; }
+        .disconnected { background: #dc3545; }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-group label {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .filter-group select, .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .clear-filters {
+            padding: 8px 16px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .clear-filters:hover {
+            background: #5a6268;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧠 SurgiInject Dashboard</h1>
+            <p>Real-Time Injection Monitoring & Analytics</p>
+        </div>
+
+        <div class="connection-status" id="connectionStatus">
+            Connecting...
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <h2>📊 Live Statistics</h2>
+                <div class="stats-grid" id="statsGrid">
+                    <!-- Stats will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>🔧 Filters & Controls</h2>
+                <div class="filters">
+                    <div class="filter-group">
+                        <label>Status:</label>
+                        <select id="statusFilter">
+                            <option value="">All</option>
+                            <option value="start">Start</option>
+                            <option value="success">Success</option>
+                            <option value="error">Error</option>
+                            <option value="cache_hit">Cache Hit</option>
+                            <option value="escalation">Escalation</option>
+                            <option value="fallback">Fallback</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Provider:</label>
+                        <select id="providerFilter">
+                            <option value="">All</option>
+                            <option value="anthropic">Anthropic</option>
+                            <option value="groq">Groq</option>
+                            <option value="mistral">Mistral</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>File:</label>
+                        <input type="text" id="fileFilter" placeholder="Filter by filename...">
+                    </div>
+                    <button class="clear-filters" onclick="clearFilters()">Clear Filters</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card logs-container">
+            <h2>📋 Live Injection Logs</h2>
+            <div id="logsContainer">
+                <!-- Logs will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SurgiInjectDashboard {
+            constructor() {
+                this.ws = null;
+                this.logs = [];
+                this.stats = {};
+                this.filters = {
+                    status: '',
+                    provider: '',
+                    file: ''
+                };
+                this.init();
+            }
+
+            init() {
+                this.connectWebSocket();
+                this.setupFilters();
+                this.updateConnectionStatus('Connecting...', 'disconnected');
+            }
+
+            connectWebSocket() {
+                const wsUrl = `ws://${window.location.hostname}:8766`;
+                this.ws = new WebSocket(wsUrl);
+
+                this.ws.onopen = () => {
+                    this.updateConnectionStatus('Connected', 'connected');
+                    console.log('WebSocket connected');
+                };
+
+                this.ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    this.handleMessage(data);
+                };
+
+                this.ws.onclose = () => {
+                    this.updateConnectionStatus('Disconnected', 'disconnected');
+                    console.log('WebSocket disconnected');
+                    // Reconnect after 5 seconds
+                    setTimeout(() => this.connectWebSocket(), 5000);
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.updateConnectionStatus('Error', 'disconnected');
+                };
+            }
+
+            handleMessage(data) {
+                switch (data.type) {
+                    case 'initial_data':
+                        this.logs = data.recent_events || [];
+                        this.stats = data.stats || {};
+                        this.render();
+                        break;
+                    case 'injection_event':
+                        this.logs.unshift(data.data);
+                        if (this.logs.length > 100) {
+                            this.logs.pop();
+                        }
+                        this.updateStats();
+                        this.render();
+                        break;
+                    case 'stats_update':
+                        this.stats = data.data;
+                        this.renderStats();
+                        break;
+                    case 'events_update':
+                        this.logs = data.data;
+                        this.render();
+                        break;
+                }
+            }
+
+            updateStats() {
+                // Update stats based on current logs
+                this.stats = {
+                    total_injections: this.logs.filter(log => log.status === 'start').length,
+                    successful_injections: this.logs.filter(log => log.status === 'success').length,
+                    failed_injections: this.logs.filter(log => log.status === 'error').length,
+                    cache_hits: this.logs.filter(log => log.status === 'cache_hit').length,
+                    escalations: this.logs.filter(log => log.status === 'escalation').length,
+                    fallbacks: this.logs.filter(log => log.status === 'fallback').length,
+                    total_tokens: this.logs.reduce((sum, log) => sum + (log.tokens || 0), 0),
+                    providers_used: this.getProviderStats()
+                };
+            }
+
+            getProviderStats() {
+                const providers = {};
+                this.logs.forEach(log => {
+                    if (log.provider) {
+                        providers[log.provider] = (providers[log.provider] || 0) + 1;
+                    }
+                });
+                return providers;
+            }
+
+            render() {
+                this.renderStats();
+                this.renderLogs();
+            }
+
+            renderStats() {
+                const statsGrid = document.getElementById('statsGrid');
+                const stats = [
+                    { label: 'Total Injections', value: this.stats.total_injections || 0 },
+                    { label: 'Successful', value: this.stats.successful_injections || 0 },
+                    { label: 'Failed', value: this.stats.failed_injections || 0 },
+                    { label: 'Cache Hits', value: this.stats.cache_hits || 0 },
+                    { label: 'Escalations', value: this.stats.escalations || 0 },
+                    { label: 'Fallbacks', value: this.stats.fallbacks || 0 },
+                    { label: 'Total Tokens', value: this.stats.total_tokens || 0 },
+                    { label: 'Success Rate', value: this.getSuccessRate() }
+                ];
+
+                statsGrid.innerHTML = stats.map(stat => `
+                    <div class="stat-card">
+                        <div class="stat-number">${stat.value}</div>
+                        <div class="stat-label">${stat.label}</div>
+                    </div>
+                `).join('');
+            }
+
+            getSuccessRate() {
+                const total = this.stats.total_injections || 0;
+                const successful = this.stats.successful_injections || 0;
+                return total > 0 ? `${Math.round((successful / total) * 100)}%` : '0%';
+            }
+
+            renderLogs() {
+                const logsContainer = document.getElementById('logsContainer');
+                const filteredLogs = this.filterLogs();
+
+                if (filteredLogs.length === 0) {
+                    logsContainer.innerHTML = '<p style="text-align: center; color: #666; padding: 20px;">No injection logs found</p>';
+                    return;
+                }
+
+                logsContainer.innerHTML = filteredLogs.map(log => this.renderLogItem(log)).join('');
+            }
+
+            renderLogItem(log) {
+                const timestamp = new Date(log.timestamp).toLocaleTimeString();
+                const statusClass = log.status.replace('_', '-');
+                
+                return `
+                    <div class="log-item ${log.status}">
+                        <div class="log-header">
+                            <span class="log-status ${log.status}">${log.status.toUpperCase()}</span>
+                            <span class="log-timestamp">${timestamp}</span>
+                        </div>
+                        <div class="log-details">
+                            ${log.target_file ? `<span class="log-file">${log.target_file}</span>` : ''}
+                            ${log.provider ? ` • <span class="log-provider">${log.provider}</span>` : ''}
+                            ${log.tokens ? ` • <span class="log-tokens">${log.tokens} tokens</span>` : ''}
+                            ${log.cache_hit ? ' • <span style="color: #ffc107;">Cache Hit</span>' : ''}
+                            ${log.escalation_triggered ? ' • <span style="color: #fd7e14;">Escalated</span>' : ''}
+                            ${log.fallback_used ? ' • <span style="color: #6f42c1;">Fallback</span>' : ''}
+                        </div>
+                        ${log.result_preview ? `<div style="margin-top: 8px; font-size: 0.85rem; color: #666;">${log.result_preview}</div>` : ''}
+                        ${log.error ? `<div class="log-error">Error: ${log.error}</div>` : ''}
+                    </div>
+                `;
+            }
+
+            filterLogs() {
+                return this.logs.filter(log => {
+                    if (this.filters.status && log.status !== this.filters.status) return false;
+                    if (this.filters.provider && log.provider !== this.filters.provider) return false;
+                    if (this.filters.file && log.target_file && !log.target_file.toLowerCase().includes(this.filters.file.toLowerCase())) return false;
+                    return true;
+                });
+            }
+
+            setupFilters() {
+                document.getElementById('statusFilter').addEventListener('change', (e) => {
+                    this.filters.status = e.target.value;
+                    this.renderLogs();
+                });
+
+                document.getElementById('providerFilter').addEventListener('change', (e) => {
+                    this.filters.provider = e.target.value;
+                    this.renderLogs();
+                });
+
+                document.getElementById('fileFilter').addEventListener('input', (e) => {
+                    this.filters.file = e.target.value;
+                    this.renderLogs();
+                });
+            }
+
+            updateConnectionStatus(text, className) {
+                const statusEl = document.getElementById('connectionStatus');
+                statusEl.textContent = text;
+                statusEl.className = `connection-status ${className}`;
+            }
+        }
+
+        function clearFilters() {
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('providerFilter').value = '';
+            document.getElementById('fileFilter').value = '';
+            dashboard.filters = { status: '', provider: '', file: '' };
+            dashboard.renderLogs();
+        }
+
+        // Initialize dashboard
+        const dashboard = new SurgiInjectDashboard();
+    </script>
+</body>
+</html> 
