@@ -1,0 +1,39 @@
+Add comprehensive docstrings to all functions and classes in this Python file. Follow these guidelines:
+
+1. **Function Docstrings:**
+   - Use Google-style docstrings
+   - Include Args, Returns, and Raises sections where applicable
+   - Describe what the function does clearly and concisely
+   - Include type hints in the docstring if not already present
+
+2. **Class Docstrings:**
+   - Describe the class purpose and responsibilities
+   - Include Attributes section if the class has significant attributes
+   - Mention inheritance if applicable
+
+3. **Module Docstring:**
+   - Add a module-level docstring at the top if missing
+   - Describe the module's purpose and main functionality
+
+4. **Examples:**
+   ```python
+   def calculate_total(items, tax_rate=0.1):
+       """Calculate the total cost including tax.
+       
+       Args:
+           items (list): List of item prices
+           tax_rate (float, optional): Tax rate as decimal. Defaults to 0.1.
+           
+       Returns:
+           float: Total cost including tax
+           
+       Raises:
+           ValueError: If items list is empty or tax_rate is negative
+       """
+   ```
+
+5. **Preserve existing code structure and formatting**
+6. **Only add docstrings where they are missing**
+7. **Keep existing docstrings if they are already comprehensive**
+
+Apply this to all functions and classes in the file while maintaining the existing code structure and functionality. 

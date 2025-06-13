@@ -8,7 +8,9 @@ import os
 import sys
 import logging
 from pathlib import Path
+from typing import List
 from engine.injector import run_injection
+from engine.recursive import inject_directory
 from engine.diff import show_diff
 from datetime import datetime
 import chardet
@@ -101,6 +103,83 @@ def inject(file, prompt, apply, verbose, provider, force, encoding, debug, no_ca
         # Log injection details
         logger.info(f"✅ Injected: {provider} | Tokens used: ~{len(source_code)} | Timestamp: {datetime.now()}")
 
+    except KeyboardInterrupt:
+        click.echo("\n⚠️  Operation cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        click.echo(f"❌ Unexpected error: {e}", err=True)
+        sys.exit(1)
+
+@cli.command()
+@click.option('--path', '-p', required=True, help='Path to directory to process')
+@click.option('--prompt', '-pr', required=True, help='Path to prompt template file')
+@click.option('--extensions', '-e', multiple=True, default=['.py', '.html', '.js', '.css', '.txt'], help='File extensions to process')
+@click.option('--recursive', '-r', is_flag=True, default=True, help='Process subdirectories recursively')
+@click.option('--apply', '-a', is_flag=True, help='Apply changes to files (default: show diffs only)')
+@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
+@click.option('--max-size', default=10.0, help='Maximum file size in MB to process')
+@click.option('--exclude', multiple=True, help='Directories to exclude (e.g., __pycache__, .git)')
+def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, exclude):
+    """
+    Inject AI-powered modifications into all files in a directory.
+    
+    This command processes multiple files recursively, applying the same prompt
+    to each file that matches the specified extensions.
+    """
+    
+    try:
+        # Validate directory
+        if not os.path.exists(path):
+            click.echo(f"❌ Error: Directory '{path}' not found", err=True)
+            sys.exit(1)
+            
+        if not os.path.isdir(path):
+            click.echo(f"❌ Error: '{path}' is not a directory", err=True)
+            sys.exit(1)
+            
+        # Validate prompt file
+        if not os.path.exists(prompt):
+            click.echo(f"❌ Error: Prompt file '{prompt}' not found", err=True)
+            sys.exit(1)
+            
+        click.echo(f"🚀 Starting directory injection in: {path}")
+        click.echo(f"📁 Extensions: {list(extensions)}")
+        click.echo(f"🔄 Recursive: {recursive}")
+        click.echo(f"💾 Apply changes: {apply}")
+        
+        # Set default exclusions if none provided
+        if not exclude:
+            exclude = ['__pycache__', '.git', '.venv', 'node_modules', '.pytest_cache']
+            
+        # Run directory injection
+        results = inject_directory(
+            directory_path=path,
+            prompt_path=prompt,
+            extensions=list(extensions),
+            recursive=recursive,
+            apply_changes=apply,
+            verbose=verbose
+        )
+        
+        # Display results
+        click.echo(f"\n🎯 Injection Results:")
+        click.echo(f"📊 Total files processed: {results['total_files']}")
+        click.echo(f"✅ Successful: {results['successful']}")
+        click.echo(f"❌ Failed: {results['failed']}")
+        
+        if results['failed'] > 0:
+            click.echo(f"\n❌ Failed files:")
+            for failed in results['failed_files']:
+                click.echo(f"   - {failed['file']}: {failed['error']}")
+                
+        if results['successful'] > 0:
+            click.echo(f"\n✅ Successfully processed:")
+            for success in results['injected_files']:
+                click.echo(f"   - {success['file']}")
+                
+        # Log summary
+        logger.info(f"Directory injection complete: {results['successful']}/{results['total_files']} files processed in {path}")
+        
     except KeyboardInterrupt:
         click.echo("\n⚠️  Operation cancelled by user")
         sys.exit(1)
