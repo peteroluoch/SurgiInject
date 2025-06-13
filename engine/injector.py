@@ -125,10 +125,15 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
             logger.warning("Weak response detected, attempting escalation...")
             escalation_prompt = get_escalation_prompt(formatted_prompt, modified_code)
             try:
-                modified_code = run_model(escalation_prompt)
-                logger.info("Escalation completed")
+                escalated_response = run_model(escalation_prompt)
+                if escalated_response and escalated_response.strip():
+                    modified_code = escalated_response
+                    logger.info("Escalation completed successfully")
+                else:
+                    logger.warning("Escalation returned empty response, keeping original")
             except Exception as e:
                 logger.error(f"Escalation failed: {e}")
+                logger.warning("Keeping original response due to escalation failure")
         
         # Step 4: Final validation
         if not modified_code or not modified_code.strip():
@@ -247,17 +252,26 @@ def handle_injection(prompt, no_cache=False, force_refresh=False):
     normalized_prompt = normalize_prompt(prompt)
     if not force_refresh and not no_cache and normalized_prompt in cache:
         logger.info("Cache hit for prompt")
-        return cache[normalized_prompt]
+        cached_result = cache[normalized_prompt]
+        logger.info(f"Cached result type: {type(cached_result)}, value: {cached_result[:100] if cached_result else 'None'}")
+        return cached_result
 
     providers = ["anthropic", "groq", "openai"]
     for provider in providers:
         try:
+            logger.info(f"Trying provider: {provider}")
             result = get_completion(provider, prompt)
-            if not no_cache:
-                cache[normalized_prompt] = result
-                with open(CACHE_FILE, 'w', encoding='utf-8') as f:
-                    json.dump(cache, f)
-            return result
+            logger.info(f"Provider {provider} result type: {type(result)}, value: {result[:100] if result else 'None'}")
+            if result and result.strip():
+                if not no_cache:
+                    cache[normalized_prompt] = result
+                    with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                        json.dump(cache, f)
+                return result
+            else:
+                logger.warning(f"Provider {provider} returned empty result")
         except Exception as e:
-            logger.warning(f" {provider} failed, trying next provider...")
+            logger.warning(f" {provider} failed: {e}")
+    
+    logger.error("All providers failed, returning fallback")
     return "Soft error: All providers failed"

@@ -39,7 +39,7 @@ class MistralClient:
         if self.groq_api_key:
             self.active_provider = "groq"
             self.mock_mode = False
-            logger.info(f"Active provider selected: Groq (model: mixtral-8x7b-32768)")
+            logger.info(f"Active provider selected: Groq (model: llama3-70b-8192)")
         elif self.mistral_api_key:
             self.active_provider = "mistral"
             self.mock_mode = False
@@ -122,7 +122,7 @@ class MistralClient:
             "Content-Type": "application/json"
         }
         payload = {
-            "model": "mixtral-8x7b-32768",
+            "model": "llama3-70b-8192",
             "messages": [
                 {"role": "system", "content": "You are a surgical code refactorer. Fix bugs with precision."},
                 {"role": "user", "content": prompt}
