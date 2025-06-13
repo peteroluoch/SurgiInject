@@ -9,6 +9,7 @@ Handles the main injection workflow:
 
 import logging
 import os
+import json
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
@@ -27,6 +28,18 @@ from typing import Optional
 from .prompty import build_prompt
 from .quality import is_response_weak, should_escalate, get_escalation_prompt
 from models.mistral_client import run_model
+
+# Load cache from file if exists
+CACHE_FILE = "surgi_cache.json"
+try:
+    with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+        cache = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    cache = {}
+
+# Function to normalize prompt for caching
+def normalize_prompt(prompt):
+    return ''.join(e for e in prompt.lower().strip() if e.isalnum())
 
 def run_injection_from_files(source_path: str, prompt_path: str) -> str:
     """
@@ -206,12 +219,22 @@ def get_completion(provider, prompt):
         # Mock fallback
         return "Mock response"
 
-# Function to handle injection with fallback
-def handle_injection(prompt):
-    providers = ["anthropic", "groq-mixtral", "groq-gemma", "groq-llama", "mock"]
+# Function to handle injection with cache and fallback
+def handle_injection(prompt, no_cache=False, force_refresh=False):
+    normalized_prompt = normalize_prompt(prompt)
+    if not force_refresh and not no_cache and normalized_prompt in cache:
+        logger.info("Cache hit for prompt")
+        return cache[normalized_prompt]
+
+    providers = ["anthropic", "groq", "openai"]
     for provider in providers:
         try:
-            return get_completion(provider, prompt)
+            result = get_completion(provider, prompt)
+            if not no_cache:
+                cache[normalized_prompt] = result
+                with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+                    json.dump(cache, f)
+            return result
         except Exception as e:
             logger.warning(f"⚠️ {provider} failed, trying next provider...")
-    return ""
+    return "Soft error: All providers failed"
