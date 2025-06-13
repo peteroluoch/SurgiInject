@@ -109,8 +109,9 @@ class DashboardWebSocketServer:
         """Start the WebSocket server with FastAPI-style handler"""
         logger.info(f"Starting WebSocket server on ws://{self.host}:{self.port}")
         
-        # Create a wrapper function for the websockets library
+        # Create a wrapper function for the websockets library that properly handles the path
         async def handler(websocket, path):
+            # Call our websocket endpoint with both websocket and path
             await self.websocket_endpoint(websocket, path)
         
         async with websockets.serve(handler, self.host, self.port):
