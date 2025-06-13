@@ -33,7 +33,7 @@ class MistralClient:
         self.base_url = "https://api.mistral.ai/v1"
         
         # Check for Groq API key first, then Mistral
-        self.groq_api_key = os.getenv("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")
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
         if not self.api_key and not self.groq_api_key:
             logger.warning("No API key provided. Using mock responses.")
             self.mock_mode = True
@@ -69,10 +69,10 @@ class MistralClient:
         if self.api_key:
             try:
                 logger.info("Making API call to Mistral...")
-                # Real Mistral API implementation would go here
-                return self._mock_response(prompt)
+                return self._call_mistral_api(prompt, max_tokens, temperature)
             except Exception as e:
                 logger.error(f"Error calling Mistral API: {e}")
+                logger.info("Falling back to mock response")
                 return self._mock_response(prompt)
         
         # Final fallback
@@ -80,15 +80,18 @@ class MistralClient:
     
     def _call_groq_api(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.2) -> str:
         """
-        Call Groq API with Mixtral model.
-        
+        Call Groq API with Mixtral model with retry logic and error handling.
+
         Args:
             prompt (str): Input prompt
             max_tokens (int): Maximum tokens to generate
             temperature (float): Sampling temperature
-            
+
         Returns:
             str: Generated response
+
+        Raises:
+            Exception: If all retry attempts fail
         """
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {
@@ -105,10 +108,75 @@ class MistralClient:
             "max_tokens": max_tokens
         }
 
-        response = requests.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
-    
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=10)
+                response.raise_for_status()
+                return response.json()['choices'][0]['message']['content']
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Groq API attempt {attempt + 1} failed: {e}")
+                if hasattr(response, 'status_code'):
+                    logger.error(f"Response status: {response.status_code}")
+                if hasattr(response, 'text'):
+                    logger.error(f"Response payload: {response.text[:500]}")
+
+                if attempt < max_retries:
+                    logger.info(f"Retrying in 1 second... (attempt {attempt + 2}/{max_retries + 1})")
+                    time.sleep(1)
+                else:
+                    raise Exception(f"Groq API failed after {max_retries + 1} attempts: {e}")
+
+    def _call_mistral_api(self, prompt: str, max_tokens: int = 2048, temperature: float = 0.1) -> str:
+        """
+        Call Mistral API with retry logic and error handling.
+
+        Args:
+            prompt (str): Input prompt
+            max_tokens (int): Maximum tokens to generate
+            temperature (float): Sampling temperature
+
+        Returns:
+            str: Generated response
+
+        Raises:
+            Exception: If all retry attempts fail
+        """
+        url = "https://api.mistral.ai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": "You are a surgical code refactorer. Fix bugs with precision."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=10)
+                response.raise_for_status()
+                return response.json()['choices'][0]['message']['content']
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Mistral API attempt {attempt + 1} failed: {e}")
+                if hasattr(response, 'status_code'):
+                    logger.error(f"Response status: {response.status_code}")
+                if hasattr(response, 'text'):
+                    logger.error(f"Response payload: {response.text[:500]}")
+
+                if attempt < max_retries:
+                    logger.info(f"Retrying in 1 second... (attempt {attempt + 2}/{max_retries + 1})")
+                    time.sleep(1)
+                else:
+                    logger.error(f"Mistral API failed after {max_retries + 1} attempts, falling back to mock")
+                    raise Exception(f"Mistral API failed after {max_retries + 1} attempts: {e}")
+
     def _mock_response(self, prompt: str) -> str:
         """
         Generate a sophisticated mock response for testing purposes.
@@ -153,25 +221,37 @@ class MistralClient:
         # Simulate different response qualities based on escalation
         is_escalation = 'ESCALATION REQUEST' in prompt or 'WEAK RESPONSE' in prompt
         task_lower = prompt.lower()
-        
+
+        # Strategy pattern dispatch dictionary
+        strategies = {
+            "bug": self._add_comprehensive_bug_fixes,
+            "fix": self._add_comprehensive_bug_fixes,
+            "test": self._add_test_enhancements,
+            "optimize": self._add_performance_optimizations,
+            "performance": self._add_performance_optimizations,
+            "security": self._add_security_enhancements,
+            "documentation": self._add_comprehensive_documentation,
+            "doc": self._add_comprehensive_documentation,
+        }
+
         if is_escalation:
             # High-quality escalated response
             modified_code = self._generate_escalated_response(source_code, task_lower)
         elif 'mobile' in task_lower and 'bug' in task_lower:
             # Specialized mobile bug fixes
             modified_code = self._add_mobile_fixes(source_code)
-        elif 'bug' in task_lower or 'fix' in task_lower:
-            modified_code = self._add_comprehensive_bug_fixes(source_code)
-        elif 'test' in task_lower:
-            modified_code = self._add_test_enhancements(source_code)
-        elif 'optimize' in task_lower or 'performance' in task_lower:
-            modified_code = self._add_performance_optimizations(source_code)
-        elif 'security' in task_lower:
-            modified_code = self._add_security_enhancements(source_code)
-        elif 'documentation' in task_lower or 'doc' in task_lower:
-            modified_code = self._add_comprehensive_documentation(source_code)
         else:
-            modified_code = self._add_intelligent_enhancements(source_code)
+            # Use strategy pattern to select enhancement
+            selected_strategy = None
+            for keyword, strategy in strategies.items():
+                if keyword in task_lower:
+                    selected_strategy = strategy
+                    break
+
+            if selected_strategy:
+                modified_code = selected_strategy(source_code)
+            else:
+                modified_code = self._add_generic_enhancement(source_code)
         
         # Add delay to simulate API call
         time.sleep(0.3)
