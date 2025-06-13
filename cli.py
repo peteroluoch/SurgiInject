@@ -58,30 +58,13 @@ def inject(file, prompt, apply, verbose, provider, force, encoding, debug, no_ca
             prompt_template = prompt
         else:
             prompt_path = os.path.join("prompts", f"{prompt}.txt")
-            with open(prompt_path, 'r', encoding='utf-8') as f:
-                prompt_template = f.read()
+            prompt_template = read_input_file(prompt_path)
 
         if verbose:
             click.echo(f"🔍 Using prompt: {prompt_template}")
 
         # Read source code with encoding handling
-        try:
-            with open(file, 'rb') as f:
-                raw_data = f.read(1000)
-                detected_encoding = chardet.detect(raw_data)['encoding']
-                encoding_to_use = encoding if encoding else detected_encoding
-                if verbose:
-                    click.echo(f"Detected encoding: {encoding_to_use}")
-                f.seek(0)
-                source_code = f.read().decode(encoding_to_use)
-        except UnicodeDecodeError:
-            click.echo(f"❌ Error decoding file {file} with encoding {encoding_to_use}", err=True)
-            sys.exit(1)
-        except Exception as e:
-            click.echo(f"❌ Unexpected error: {e}", err=True)
-            if debug:
-                raise
-            sys.exit(1)
+        source_code = read_input_file(file)
 
         if debug:
             logger.setLevel(logging.DEBUG)
@@ -124,6 +107,25 @@ def inject(file, prompt, apply, verbose, provider, force, encoding, debug, no_ca
     except Exception as e:
         click.echo(f"❌ Unexpected error: {e}", err=True)
         sys.exit(1)
+
+# Function to read input file with encoding detection
+def read_input_file(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except UnicodeDecodeError as e:
+        print(f"⚠️ UTF-8 decoding failed for {path}: {e}")
+        # Attempt to detect encoding
+        try:
+            with open(path, 'rb') as f:
+                raw = f.read()
+                detected = chardet.detect(raw)
+                fallback_encoding = detected.get("encoding", "utf-8")
+                print(f"🔍 Detected fallback encoding: {fallback_encoding}")
+                return raw.decode(fallback_encoding, errors="replace")
+        except Exception as inner_e:
+            print(f"❌ Failed to read file with fallback encoding: {inner_e}")
+            raise RuntimeError(f"Unable to read file: {path}")
 
 # Function to check for duplicate prompts
 def is_duplicate(prompt_hash):

@@ -17,6 +17,13 @@ load_dotenv(find_dotenv())
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+# Ensure API keys are included in the logic
+if not ANTHROPIC_API_KEY:
+    logger.warning(" Anthropic API key not found. Anthropic provider will be skipped.")
+
+if not GROQ_API_KEY:
+    logger.warning(" Groq API key not found. Groq provider will be skipped.")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
     logging.FileHandler("logs/injection.log"),
@@ -85,7 +92,7 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
         # Check for duplicate prompt
         prompt_hash = hash(prompt_template)
         if not force and is_duplicate(prompt_hash):
-            logger.warning("⚠️ Duplicate prompt detected. Skipping.")
+            logger.warning(" Duplicate prompt detected. Skipping.")
             return source_code
         
         # Step 1: Build formatted prompt
@@ -128,7 +135,7 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
             return source_code
             
         logger.info("Injection process completed successfully")
-        logger.info(f"🔥 Injected: {provider} | ⏱ {len(source_code)} tokens | ✅ success")
+        logger.info(f" Injected: {provider} |  {len(source_code)} tokens |  success")
         return modified_code
         
     except Exception as e:
@@ -201,19 +208,14 @@ def auto_select_provider():
 def get_completion(provider, prompt):
     if provider == "anthropic":
         if not ANTHROPIC_API_KEY:
-            logger.warning("🔑 Anthropic key missing — skipping to Groq")
             raise Exception("Anthropic key missing")
         # Implement Anthropic API call
-    elif provider == "groq-mixtral":
+    elif provider == "groq":
         if not GROQ_API_KEY:
-            logger.warning("🔑 Groq Mixtral key missing — skipping to next")
-            raise Exception("Groq Mixtral key missing")
-        # Implement Groq Mixtral API call
-    elif provider == "groq-gemma":
-        # Implement Groq Gemma API call
-        pass
-    elif provider == "groq-llama":
-        # Implement Groq LLaMA API call
+            raise Exception("Groq key missing")
+        # Implement Groq API call
+    elif provider == "openai":
+        # Implement OpenAI API call
         pass
     else:
         # Mock fallback
@@ -236,5 +238,5 @@ def handle_injection(prompt, no_cache=False, force_refresh=False):
                     json.dump(cache, f)
             return result
         except Exception as e:
-            logger.warning(f"⚠️ {provider} failed, trying next provider...")
+            logger.warning(f" {provider} failed, trying next provider...")
     return "Soft error: All providers failed"
