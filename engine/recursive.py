@@ -7,8 +7,15 @@ import os
 import logging
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
-from .injector import run_injection
-from .file_utils import is_supported_file, get_file_encoding
+from .injector import run_injection, run_injection_from_files
+from .file_utils import (
+    is_supported_file, 
+    get_file_encoding, 
+    file_contains_marker, 
+    add_marker_to_content,
+    is_meaningful_response,
+    safe_write_file
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +74,19 @@ class RecursiveInjector:
             try:
                 logger.info(f"Processing: {file_path}")
                 
+                # Check if file is already injected
+                if file_contains_marker(file_path):
+                    logger.info(f"Skipping already-injected file: {file_path}")
+                    continue
+                
                 # Read source file
                 with open(file_path, 'r', encoding=get_file_encoding(file_path)) as f:
                     source_code = f.read()
+                
+                # Skip empty files
+                if not source_code.strip():
+                    logger.info(f"Skipping empty file: {file_path}")
+                    continue
                 
                 # Run injection using the correct function signature
                 modified_code = run_injection(
@@ -80,23 +97,31 @@ class RecursiveInjector:
                     force=False
                 )
                 
-                # Check if injection was successful
-                if modified_code and not modified_code.startswith("[Injection failed"):
+                # Check if injection was successful and meaningful
+                if is_meaningful_response(modified_code):
+                    # Add marker to the modified content
+                    marked_content = add_marker_to_content(modified_code, file_path)
+                    
                     self.injected_files.append({
                         'file': str(file_path),
                         'original': source_code,
-                        'modified': modified_code,
+                        'modified': marked_content,
                         'success': True
                     })
                     logger.info(f"Success: {file_path}")
                     
                     # Apply changes if requested
                     if apply_changes:
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(modified_code)
-                        logger.info(f"Applied changes to: {file_path}")
+                        if safe_write_file(file_path, marked_content):
+                            logger.info(f"Applied changes to: {file_path}")
+                        else:
+                            logger.error(f"Failed to write changes to: {file_path}")
+                            self.failed_files.append({
+                                'file': str(file_path),
+                                'error': 'Failed to write file'
+                            })
                 else:
-                    error_msg = modified_code if modified_code.startswith("[Injection failed") else "Unknown error"
+                    error_msg = "AI response was not meaningful or contained errors"
                     self.failed_files.append({
                         'file': str(file_path),
                         'error': error_msg
@@ -217,4 +242,79 @@ def inject_directory(
         recursive=recursive,
         apply_changes=apply_changes,
         verbose=verbose
-    ) 
+    )
+
+def file_contains_marker(file_path: Path, marker: str = "# Injected by SurgiInject") -> bool:
+    """Legacy function for backward compatibility"""
+    from .file_utils import file_contains_marker as new_file_contains_marker
+    return new_file_contains_marker(file_path)
+
+def inject_dir(
+    path: str,
+    prompt_path: str,
+    extensions: List[str] = [".py", ".html", ".js"],
+    recursive: bool = True
+) -> Dict[str, List[str]]:
+    """
+    Enhanced inject_dir function with marker logic and meaningful response checking
+    """
+    injected = []
+    skipped = []
+    failed = []
+    base = Path(path)
+    
+    if not base.exists():
+        logger.error(f"Directory not found: {path}")
+        return {"injected": injected, "skipped": skipped, "failed": failed}
+    
+    files = []
+    if recursive:
+        for root, _, filenames in os.walk(base):
+            for fname in filenames:
+                fpath = Path(root) / fname
+                if is_supported_file(fname, extensions):
+                    files.append(fpath)
+    else:
+        for item in base.iterdir():
+            if item.is_file() and is_supported_file(item.name, extensions):
+                files.append(item)
+    
+    for file_path in sorted(files):
+        try:
+            # Check if already injected
+            if file_contains_marker(file_path):
+                logger.info(f"Skipping already-injected file: {file_path}")
+                skipped.append(str(file_path))
+                continue
+            
+            # Read original content
+            with open(file_path, 'r', encoding=get_file_encoding(file_path)) as f:
+                original_content = f.read()
+            
+            # Skip empty files
+            if not original_content.strip():
+                logger.info(f"Skipping empty file: {file_path}")
+                continue
+            
+            logger.info(f"Injecting: {file_path}")
+            result = run_injection_from_files(str(file_path), prompt_path)
+            
+            # Check if response is meaningful
+            if is_meaningful_response(result):
+                # Add marker and write
+                marked_result = add_marker_to_content(result, file_path)
+                if safe_write_file(file_path, marked_result, backup=True):
+                    injected.append(str(file_path))
+                    logger.info(f"Successfully injected: {file_path}")
+                else:
+                    failed.append(str(file_path))
+                    logger.error(f"Failed to write: {file_path}")
+            else:
+                failed.append(str(file_path))
+                logger.error(f"Meaningless response for: {file_path}")
+                
+        except Exception as e:
+            logger.error(f"Failed to inject {file_path}: {e}")
+            failed.append(str(file_path))
+    
+    return {"injected": injected, "skipped": skipped, "failed": failed} 

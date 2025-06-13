@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import List
 from engine.injector import run_injection
-from engine.recursive import inject_directory
+from engine.recursive import inject_dir
 from engine.diff import show_diff
 from datetime import datetime
 import chardet
@@ -152,33 +152,37 @@ def inject_dir(path, prompt, extensions, recursive, apply, verbose, max_size, ex
             exclude = ['__pycache__', '.git', '.venv', 'node_modules', '.pytest_cache']
             
         # Run directory injection
-        results = inject_directory(
-            directory_path=path,
+        results = inject_dir(
+            path=path,
             prompt_path=prompt,
             extensions=list(extensions),
-            recursive=recursive,
-            apply_changes=apply,
-            verbose=verbose
+            recursive=recursive
         )
         
         # Display results
         click.echo(f"\n🎯 Injection Results:")
-        click.echo(f"📊 Total files processed: {results['total_files']}")
-        click.echo(f"✅ Successful: {results['successful']}")
-        click.echo(f"❌ Failed: {results['failed']}")
+        click.echo(f"📊 Total files processed: {len(results['injected']) + len(results['skipped']) + len(results['failed'])}")
+        click.echo(f"✅ Successfully injected: {len(results['injected'])}")
+        click.echo(f"⏭️ Skipped (already injected): {len(results['skipped'])}")
+        click.echo(f"❌ Failed: {len(results['failed'])}")
         
-        if results['failed'] > 0:
+        if results['failed']:
             click.echo(f"\n❌ Failed files:")
-            for failed in results['failed_files']:
-                click.echo(f"   - {failed['file']}: {failed['error']}")
+            for failed in results['failed']:
+                click.echo(f"   - {failed}")
                 
-        if results['successful'] > 0:
-            click.echo(f"\n✅ Successfully processed:")
-            for success in results['injected_files']:
-                click.echo(f"   - {success['file']}")
+        if results['injected']:
+            click.echo(f"\n✅ Successfully injected:")
+            for success in results['injected']:
+                click.echo(f"   - {success}")
+                
+        if results['skipped']:
+            click.echo(f"\n⏭️ Skipped (already had marker):")
+            for skipped in results['skipped']:
+                click.echo(f"   - {skipped}")
                 
         # Log summary
-        logger.info(f"Directory injection complete: {results['successful']}/{results['total_files']} files processed in {path}")
+        logger.info(f"Directory injection complete: {len(results['injected'])}/{len(results['injected']) + len(results['skipped']) + len(results['failed'])} files processed in {path}")
         
     except KeyboardInterrupt:
         click.echo("\n⚠️  Operation cancelled by user")

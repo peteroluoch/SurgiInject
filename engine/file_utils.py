@@ -8,6 +8,91 @@ import chardet
 from pathlib import Path
 from typing import List, Optional
 
+# Marker constants for different file types
+PYTHON_MARKER = "# Injected by SurgiInject"
+HTML_MARKER = "<!-- Injected by SurgiInject -->"
+JS_MARKER = "// Injected by SurgiInject"
+
+def get_marker_for_file(file_path: Path) -> str:
+    """
+    Get the appropriate marker for a file based on its extension
+    
+    Args:
+        file_path: Path to the file
+        
+    Returns:
+        str: Appropriate marker string for the file type
+    """
+    ext = file_path.suffix.lower()
+    if ext == '.py':
+        return PYTHON_MARKER
+    elif ext in ['.html', '.htm']:
+        return HTML_MARKER
+    elif ext in ['.js', '.ts', '.jsx', '.tsx']:
+        return JS_MARKER
+    else:
+        return PYTHON_MARKER  # Default fallback
+
+def file_contains_marker(file_path: Path) -> bool:
+    """
+    Check if a file contains the appropriate injection marker
+    
+    Args:
+        file_path: Path to the file to check
+        
+    Returns:
+        bool: True if file contains marker, False otherwise
+    """
+    try:
+        marker = get_marker_for_file(file_path)
+        with open(file_path, 'r', encoding=get_file_encoding(file_path)) as f:
+            content = f.read()
+            return marker in content
+    except Exception as e:
+        print(f"Warning: Could not check marker in {file_path}: {e}")
+        return False
+
+def add_marker_to_content(content: str, file_path: Path) -> str:
+    """
+    Add the appropriate marker to the beginning of file content
+    
+    Args:
+        content: Original file content
+        file_path: Path to the file (for determining marker type)
+        
+    Returns:
+        str: Content with marker prepended
+    """
+    marker = get_marker_for_file(file_path)
+    if marker not in content:
+        return marker + "\n" + content
+    return content
+
+def is_meaningful_response(response: str) -> bool:
+    """
+    Check if AI response is meaningful and should be applied
+    
+    Args:
+        response: AI response to check
+        
+    Returns:
+        bool: True if response is meaningful, False otherwise
+    """
+    if not response or not response.strip():
+        return False
+    
+    # Skip if response is just whitespace or error messages
+    response_lower = response.lower().strip()
+    if response_lower in ['', 'none', 'null', 'undefined']:
+        return False
+    
+    # Skip if response contains error indicators
+    error_indicators = ['error:', 'failed:', 'exception:', '[injection failed']
+    if any(indicator in response_lower for indicator in error_indicators):
+        return False
+    
+    return True
+
 def is_supported_file(filename: str, extensions: List[str]) -> bool:
     """
     Check if a file should be processed based on its extension
