@@ -12,6 +12,8 @@ from typing import Optional
 from .prompty import build_prompt
 from .quality import is_response_weak, should_escalate, get_escalation_prompt
 from models.mistral_client import run_model
+from dotenv import load_dotenv
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +40,7 @@ def run_injection_from_files(source_path: str, prompt_path: str) -> str:
     modified_code = run_model(prompt)
     return modified_code
 
-def run_injection(source_code: str, prompt_template: str, file_path: Optional[str] = None) -> str:
+def run_injection(source_code: str, prompt_template: str, file_path: Optional[str] = None, provider: str = 'auto', force: bool = False) -> str:
     """
     Run the complete injection workflow.
     
@@ -46,6 +48,8 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
         source_code (str): The original source code to modify
         prompt_template (str): The prompt template content
         file_path (str, optional): Path to the source file for context
+        provider (str, optional): Specify the provider to use
+        force (bool, optional): Force injection even if duplicate prompt is detected
         
     Returns:
         str: Modified source code
@@ -55,6 +59,12 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
     """
     try:
         logger.info("Starting injection process...")
+        
+        # Check for duplicate prompt
+        prompt_hash = hash(prompt_template)
+        if not force and is_duplicate(prompt_hash):
+            logger.warning("⚠️ Duplicate prompt detected. Skipping.")
+            return source_code
         
         # Step 1: Build formatted prompt
         logger.info("Building formatted prompt...")
@@ -69,9 +79,19 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
         
         logger.info(f"Prompt built successfully (length: {len(formatted_prompt)} chars)")
         
+        # Handle provider selection
+        if provider == 'auto':
+            provider = auto_select_provider()
+        logger.info(f"Selected provider: {provider}")
+        
         # Step 2: Send to AI model
         logger.info("Sending to AI model...")
-        modified_code = run_model(formatted_prompt)
+        try:
+            modified_code = get_completion(provider, formatted_prompt)
+        except Exception as e:
+            logger.warning(f"⛔ {provider} failed, fallback triggered")
+            # Implement fallback logic here
+            modified_code = run_model(formatted_prompt)
         
         logger.info("AI model processing completed")
         
@@ -91,6 +111,7 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
             return source_code
             
         logger.info("Injection process completed successfully")
+        logger.info(f"🔥 Injected: {provider} | ⏱ {len(source_code)} tokens | ✅ success")
         return modified_code
         
     except Exception as e:
@@ -148,3 +169,18 @@ def backup_file(file_path: str) -> str:
     except Exception as e:
         logger.error(f"Failed to create backup: {e}")
         raise
+
+# Function to check for duplicate prompts
+def is_duplicate(prompt_hash):
+    # Check against stored hashes
+    return False
+
+# Function to auto-select provider
+def auto_select_provider():
+    # Implement provider selection logic
+    return 'anthropic'
+
+# Function to get completion from provider
+def get_completion(provider, prompt):
+    # Implement provider logic
+    return ""

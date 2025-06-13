@@ -6,9 +6,14 @@ SurgiInject CLI - AI-powered code injection and modification tool
 import click
 import os
 import sys
+import logging
 from pathlib import Path
 from engine.injector import run_injection
 from engine.diff import show_diff
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Phase 3: API Key Safety Check
 if not os.getenv("GROQ_API_KEY"):
@@ -26,7 +31,9 @@ def cli():
 @click.option('--prompt', '-p', required=True, help='Prompt name or path to prompt template file')
 @click.option('--apply', '-a', is_flag=True, help='Apply changes to file (default: show diff only)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
-def inject(file, prompt, apply, verbose):
+@click.option('--provider', '-pr', default='auto', type=click.Choice(['anthropic', 'groq-mixtral', 'groq-gemma', 'auto']), help='Specify the provider to use')
+@click.option('--force', is_flag=True, help='Force injection even if duplicate prompt is detected')
+def inject(file, prompt, apply, verbose, provider, force):
     """
     Inject AI-powered modifications into a source file using a prompt template.
     """
@@ -62,10 +69,21 @@ def inject(file, prompt, apply, verbose):
         with open(prompt_path, 'r', encoding='utf-8') as f:
             prompt_template = f.read()
 
+        # Handle provider selection
+        if provider == 'auto':
+            provider = auto_select_provider()
+        click.echo(f"Selected provider: {provider}")
+
+        # Check for duplicate prompt
+        prompt_hash = hash(prompt_template)
+        if not force and is_duplicate(prompt_hash):
+            click.echo("⚠️ Duplicate prompt detected. Skipping.")
+            return
+
         # Run AI injection
         if verbose:
             click.echo("🚀 Running AI injection...")
-        modified_code = run_injection(source_code, prompt_template, file_path=file)
+        modified_code = run_injection(source_code, prompt_template, file_path=file, provider=provider)
 
         # Output results
         if apply:
@@ -77,12 +95,25 @@ def inject(file, prompt, apply, verbose):
             show_diff(source_code, modified_code, file)
             click.echo("\n💡 Use --apply to write these changes to the file")
 
+        # Log injection details
+        logger.info(f"🔥 Injected: {provider} | ⏱ {len(source_code)} tokens | ✅ success")
+
     except KeyboardInterrupt:
         click.echo("\n⚠️  Operation cancelled by user")
         sys.exit(1)
     except Exception as e:
         click.echo(f"❌ Unexpected error: {e}", err=True)
         sys.exit(1)
+
+# Function to check for duplicate prompts
+def is_duplicate(prompt_hash):
+    # Check against stored hashes
+    return False
+
+# Function to auto-select provider
+def auto_select_provider():
+    # Implement provider selection logic
+    return 'anthropic'
 
 if __name__ == '__main__':
     cli()
