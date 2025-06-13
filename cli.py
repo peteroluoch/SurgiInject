@@ -455,5 +455,70 @@ def auto_select_provider():
     # Implement provider selection logic
     return 'anthropic'
 
+@cli.command()
+@click.option('--stats', '-s', is_flag=True, help='Show retry and failure statistics')
+@click.option('--clear', '-c', is_flag=True, help='Clear failure log')
+@click.option('--export', '-e', help='Export failure report to file')
+@click.option('--verbose', '-v', is_flag=True, help='Show detailed failure information')
+def retry_stats(stats, clear, export, verbose):
+    """Manage retry engine and failure statistics"""
+    try:
+        from engine.retry_engine import get_retry_stats
+        from engine.response_validator import validator
+        
+        if clear:
+            if click.confirm("Clear all failure logs?"):
+                validator.failure_log_path.unlink(missing_ok=True)
+                click.echo("✅ Failure logs cleared")
+            return 0
+        
+        if export:
+            from engine.retry_engine import retry_engine
+            retry_engine.export_failure_report(export)
+            click.echo(f"✅ Failure report exported to {export}")
+            return 0
+        
+        if stats:
+            # Show retry statistics
+            stats_data = get_retry_stats()
+            
+            click.echo("📊 Retry Engine Statistics:")
+            click.echo(f"  Max attempts: {stats_data['max_attempts']}")
+            click.echo(f"  Max providers: {stats_data['max_providers']}")
+            click.echo(f"  Total failures: {stats_data['total_failures']}")
+            
+            if stats_data['total_failures'] > 0:
+                click.echo("\n🔍 Provider Failures:")
+                for provider, count in stats_data['providers'].items():
+                    click.echo(f"  {provider}: {count} failures")
+                
+                click.echo("\n📁 File Failures:")
+                for file_path, count in stats_data['files'].items():
+                    click.echo(f"  {file_path}: {count} failures")
+                
+                if verbose and stats_data['recent_failures']:
+                    click.echo("\n🕒 Recent Failures:")
+                    for failure in stats_data['recent_failures'][:5]:
+                        click.echo(f"  {failure['timestamp']} - {failure['provider']} failed for {failure['file']}")
+                        click.echo(f"    Reason: {failure['reason'][:100]}...")
+                        click.echo()
+            else:
+                click.echo("  🎉 No failures recorded!")
+            
+            return 0
+        
+        # Default: show help
+        click.echo("Retry engine management commands:")
+        click.echo("  --stats: Show retry and failure statistics")
+        click.echo("  --clear: Clear failure log")
+        click.echo("  --export <file>: Export failure report")
+        click.echo("  --verbose: Show detailed failure information")
+        
+        return 0
+        
+    except Exception as e:
+        click.echo(f"❌ Retry stats failed: {e}", err=True)
+        return 1
+
 if __name__ == '__main__':
     cli()
