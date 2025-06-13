@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 Injection Logger for SurgiInject
-Handles real-time event emission to dashboard
+FastAPI-style real-time event emission to dashboard
 """
 
 import json
 import logging
 from datetime import datetime
 from typing import Dict, Any, List
+import asyncio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -31,7 +32,7 @@ class InjectionLogger:
         self._broadcast_callback = callback
     
     def _emit_event(self, event_type: str, data: Dict[str, Any]):
-        """Emit an event and broadcast it if callback is set"""
+        """Emit an event and broadcast it if callback is set (FastAPI style)"""
         event = {
             "type": event_type,
             "data": data,
@@ -46,10 +47,19 @@ class InjectionLogger:
         if len(self.events) > 100:  # Keep last 100 events
             self.events = self.events[-100:]
         
-        # Broadcast if callback is set
+        # Broadcast if callback is set (FastAPI style)
         if self._broadcast_callback:
             try:
-                asyncio.create_task(self._broadcast_callback(event_type, data))
+                # Create async task for broadcasting
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(self._broadcast_callback(event_type, data))
+                else:
+                    # If no event loop, run in new thread
+                    import threading
+                    def run_broadcast():
+                        asyncio.run(self._broadcast_callback(event_type, data))
+                    threading.Thread(target=run_broadcast, daemon=True).start()
             except Exception as e:
                 logger.error(f"Error broadcasting event: {e}")
     

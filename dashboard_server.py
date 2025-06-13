@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Unified Dashboard Server for SurgiInject
-Single server handling both HTTP and WebSocket with real-time injection monitoring
+FastAPI-style WebSocket handler for persistent real-time logging
 """
 
 import asyncio
@@ -21,13 +21,13 @@ class DashboardWebSocketServer:
     def __init__(self, host='localhost', port=8766):
         self.host = host
         self.port = port
-        self.clients = set()
+        self.connected_clients = set()
         self.event_history = []
         
     async def register_client(self, websocket):
         """Register a new WebSocket client"""
-        self.clients.add(websocket)
-        logger.info(f"Client connected. Total clients: {len(self.clients)}")
+        self.connected_clients.add(websocket)
+        logger.info(f"Client connected. Total clients: {len(self.connected_clients)}")
         
         # Send recent event history to new client
         if self.event_history:
@@ -38,8 +38,21 @@ class DashboardWebSocketServer:
     
     async def unregister_client(self, websocket):
         """Unregister a WebSocket client"""
-        self.clients.discard(websocket)
-        logger.info(f"Client disconnected. Total clients: {len(self.clients)}")
+        self.connected_clients.discard(websocket)
+        logger.info(f"Client disconnected. Total clients: {len(self.connected_clients)}")
+    
+    async def broadcast_log_event(self, data: dict):
+        """Broadcast log event to all connected clients (FastAPI style)"""
+        stale_clients = []
+        for client in self.connected_clients:
+            try:
+                await client.send_json(data)
+            except:
+                stale_clients.append(client)
+        
+        # Clean up stale clients
+        for dead in stale_clients:
+            await self.unregister_client(dead)
     
     async def broadcast_event(self, event_type, data):
         """Broadcast an event to all connected clients"""
@@ -54,28 +67,15 @@ class DashboardWebSocketServer:
         if len(self.event_history) > 100:  # Keep last 100 events
             self.event_history = self.event_history[-100:]
         
-        # Broadcast to all clients
-        if self.clients:
-            disconnected = set()
-            for client in self.clients:
-                try:
-                    await client.send(json.dumps(event))
-                except websockets.exceptions.ConnectionClosed:
-                    disconnected.add(client)
-                except Exception as e:
-                    logger.error(f"Error sending to client: {e}")
-                    disconnected.add(client)
-            
-            # Clean up disconnected clients
-            for client in disconnected:
-                await self.unregister_client(client)
+        # Broadcast using FastAPI-style method
+        await self.broadcast_log_event(event)
     
-    async def handle_client(self, websocket, path):
-        """Handle WebSocket client connection with proper signature"""
+    async def websocket_endpoint(self, websocket, path):
+        """FastAPI-style WebSocket endpoint for persistent real-time logging"""
         await self.register_client(websocket)
         
         try:
-            # Keep connection alive with heartbeat
+            # Keep connection alive and ready to send messages
             while True:
                 try:
                     # Wait for messages with timeout
@@ -106,12 +106,12 @@ class DashboardWebSocketServer:
             await self.unregister_client(websocket)
     
     async def start_server(self):
-        """Start the WebSocket server"""
+        """Start the WebSocket server with FastAPI-style handler"""
         logger.info(f"Starting WebSocket server on ws://{self.host}:{self.port}")
         
         # Create a wrapper function for the websockets library
         async def handler(websocket, path):
-            await self.handle_client(websocket, path)
+            await self.websocket_endpoint(websocket, path)
         
         async with websockets.serve(handler, self.host, self.port):
             logger.info("WebSocket server started successfully")
