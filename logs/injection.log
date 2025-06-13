@@ -53,3 +53,26 @@
 2025-06-13 22:42:57,253 - WARNING -  Groq API key not found. Groq provider will be skipped.
 2025-06-13 22:45:21,737 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
 2025-06-13 22:45:21,738 - WARNING -  Groq API key not found. Groq provider will be skipped.
+2025-06-13 23:21:13,518 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
+2025-06-13 23:21:13,519 - WARNING -  Groq API key not found. Groq provider will be skipped.
+2025-06-13 23:21:19,818 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
+2025-06-13 23:21:19,819 - WARNING -  Groq API key not found. Groq provider will be skipped.
+2025-06-13 23:21:45,628 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
+2025-06-13 23:21:45,629 - WARNING -  Groq API key not found. Groq provider will be skipped.
+2025-06-13 23:21:45,808 - INFO - Starting injection process...
+2025-06-13 23:21:45,811 - INFO - Injection Event: start - test_undo.py
+2025-06-13 23:21:45,812 - INFO - Building formatted prompt...
+2025-06-13 23:21:45,815 - INFO - Prompt built successfully (length: 572 chars)
+2025-06-13 23:21:45,816 - INFO - Selected provider: anthropic
+2025-06-13 23:21:45,817 - INFO - Sending to AI model...
+2025-06-13 23:21:45,818 - ERROR - No valid AI providers available
+2025-06-13 23:21:45,819 - INFO - AI model processing completed
+2025-06-13 23:21:45,821 - INFO - Injection process completed successfully
+2025-06-13 23:21:45,822 - INFO - Injection Event: success - test_undo.py
+2025-06-13 23:21:45,824 - INFO - Backup directory ensured: C:\Users\LENOVO\Documents\ProjectsShared\Surgi\SurgiInjectClean\.surgi_backups
+2025-06-13 23:21:45,834 - INFO - Backup created: C:\Users\LENOVO\Documents\ProjectsShared\Surgi\SurgiInjectClean\.surgi_backups\test_undo.py.20250613_232145.bak
+2025-06-13 23:21:54,827 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
+2025-06-13 23:21:54,827 - WARNING -  Groq API key not found. Groq provider will be skipped.
+2025-06-13 23:22:01,222 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
+2025-06-13 23:22:01,223 - WARNING -  Groq API key not found. Groq provider will be skipped.
+2025-06-13 23:22:01,387 - INFO - File restored from backup: test_undo.py <- test_undo.py.20250613_232145.bak
