@@ -10,6 +10,7 @@ Handles the main injection workflow:
 import logging
 import os
 import json
+import hashlib
 from dotenv import load_dotenv, find_dotenv
 import requests
 load_dotenv(find_dotenv())
@@ -32,7 +33,7 @@ if not ANTHROPIC_API_KEY:
 if not GROQ_API_KEY:
     logger.warning(" Groq API key not found. Groq provider will be skipped.")
 
-from typing import Optional
+from typing import Optional, Dict, Any
 from .prompty import build_prompt
 from .quality import is_response_weak, should_escalate, get_escalation_prompt
 from models.mistral_client import run_model
@@ -44,6 +45,12 @@ try:
         cache = json.load(f)
 except (FileNotFoundError, json.JSONDecodeError):
     cache = {}
+
+# Function to compute fingerprint for duplicate detection
+def compute_fingerprint(file_content: str, prompt_content: str) -> str:
+    """Compute a unique fingerprint for file + prompt combination to detect duplicates."""
+    combined = file_content + prompt_content
+    return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
 # Function to normalize prompt for caching
 def normalize_prompt(prompt):
@@ -72,10 +79,10 @@ def run_injection_from_files(source_path: str, prompt_path: str) -> str:
 
 def run_injection(source_code: str, prompt_template: str, file_path: Optional[str] = None, provider: str = 'auto', force: bool = False) -> str:
     """
-    Run the complete injection workflow.
+    Run the injection process with enhanced error handling and escalation.
     
     Args:
-        source_code (str): The original source code to modify
+        source_code (str): The source code to modify
         prompt_template (str): The prompt template content
         file_path (str, optional): Path to the source file for context
         provider (str, optional): Specify the provider to use
@@ -90,11 +97,14 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
     try:
         logger.info("Starting injection process...")
         
-        # Check for duplicate prompt
-        prompt_hash = hash(prompt_template)
-        if not force and is_duplicate(prompt_hash):
-            logger.warning(" Duplicate prompt detected. Skipping.")
-            return source_code
+        # Check for duplicate prompt using fingerprint
+        fingerprint = compute_fingerprint(source_code, prompt_template)
+        if not force and fingerprint in cache:
+            logger.warning("Duplicate prompt detected - using cached result")
+            cached_result = cache[fingerprint]
+            if isinstance(cached_result, dict):
+                return cached_result.get("text", source_code)
+            return cached_result
         
         # Step 1: Build formatted prompt
         logger.info("Building formatted prompt...")
@@ -114,13 +124,13 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
             provider = auto_select_provider()
         logger.info(f"Selected provider: {provider}")
         
-        # Step 2: Send to AI model
+        # Step 2: Send to AI model with enhanced error handling
         logger.info("Sending to AI model...")
-        modified_code = handle_injection(formatted_prompt)
+        modified_code = handle_injection(formatted_prompt, source_code)
         
         logger.info("AI model processing completed")
         
-        # Step 3: Quality assessment and escalation
+        # Step 3: Quality assessment and escalation with safe handling
         if is_response_weak(modified_code):
             logger.warning("Weak response detected, attempting escalation...")
             escalation_prompt = get_escalation_prompt(formatted_prompt, modified_code)
@@ -141,12 +151,11 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
             return source_code
             
         logger.info("Injection process completed successfully")
-        logger.info(f" Injected: {provider} |  {len(source_code)} tokens |  success")
         return modified_code
         
     except Exception as e:
         logger.error(f"Injection process failed: {e}")
-        raise Exception(f"Injection failed: {e}")
+        return f"[Injection failed: {str(e)}. Please try again later.]"
 
 def validate_code_structure(original: str, modified: str) -> bool:
     """
@@ -210,11 +219,18 @@ def auto_select_provider():
     # Implement provider selection logic
     return 'anthropic'
 
-# Function to get completion from provider
-def get_completion(provider, prompt):
+# Function to get completion from provider with standardized response format
+def get_completion(provider: str, prompt: str) -> Optional[Dict[str, Any]]:
+    """
+    Get completion from provider with standardized response format.
+    
+    Returns:
+        Dict with keys: 'text' (str), 'tokens' (int), or None if failed
+    """
     if provider == "anthropic":
         if not ANTHROPIC_API_KEY:
-            raise Exception("Anthropic key missing")
+            logger.error("Anthropic API key missing")
+            return None
         try:
             response = requests.post(
                 "https://api.anthropic.com/v1/messages",
@@ -231,47 +247,105 @@ def get_completion(provider, prompt):
                 timeout=15
             )
             response.raise_for_status()
-            return response.json()["content"][0]["text"]
+            result = response.json()
+            return {
+                "text": result["content"][0]["text"],
+                "tokens": result.get("usage", {}).get("input_tokens", 0) + result.get("usage", {}).get("output_tokens", 0)
+            }
         except Exception as e:
             logger.error(f"Anthropic API call failed: {e}")
-            raise
+            return None
     elif provider == "groq":
         if not GROQ_API_KEY:
-            raise Exception("Groq key missing")
-        # Implement Groq API call or fallback
-        return "[Groq API call not implemented in this function]"
-    elif provider == "openai":
-        # Implement OpenAI API call
-        return "[OpenAI API call not implemented in this function]"
+            logger.error("Groq API key missing")
+            return None
+        try:
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "llama3-70b-8192",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 1024
+                },
+                timeout=15
+            )
+            response.raise_for_status()
+            result = response.json()
+            return {
+                "text": result["choices"][0]["message"]["content"],
+                "tokens": result.get("usage", {}).get("total_tokens", 0)
+            }
+        except Exception as e:
+            logger.error(f"Groq API call failed: {e}")
+            return None
     else:
-        # Mock fallback
-        return "Mock response"
+        logger.error(f"Unknown provider: {provider}")
+        return None
 
-# Function to handle injection with cache and fallback
-def handle_injection(prompt, no_cache=False, force_refresh=False):
-    normalized_prompt = normalize_prompt(prompt)
-    if not force_refresh and not no_cache and normalized_prompt in cache:
-        logger.info("Cache hit for prompt")
-        cached_result = cache[normalized_prompt]
-        logger.info(f"Cached result type: {type(cached_result)}, value: {cached_result[:100] if cached_result else 'None'}")
+# Function to handle injection with cache, duplicate detection, and real providers only
+def handle_injection(prompt: str, file_content: str = "", no_cache: bool = False, force_refresh: bool = False) -> str:
+    """
+    Handle injection with cache, duplicate detection, and real providers only.
+    
+    Args:
+        prompt: The prompt to send to AI
+        file_content: Content of the file being modified (for duplicate detection)
+        no_cache: Whether to skip cache
+        force_refresh: Whether to force refresh even if cached
+        
+    Returns:
+        str: AI response or friendly error message
+    """
+    # Compute fingerprint for duplicate detection
+    fingerprint = compute_fingerprint(file_content, prompt)
+    
+    # Check cache first (unless disabled)
+    if not force_refresh and not no_cache and fingerprint in cache:
+        logger.info("Cache hit - skipping AI call")
+        cached_result = cache[fingerprint]
+        if isinstance(cached_result, dict):
+            return cached_result.get("text", "[Cached response]")
         return cached_result
 
-    providers = ["anthropic", "groq", "openai"]
+    # Try real providers only (no mocks)
+    providers = []
+    if ANTHROPIC_API_KEY:
+        providers.append("anthropic")
+    if GROQ_API_KEY:
+        providers.append("groq")
+    
+    if not providers:
+        logger.error("No valid AI providers available")
+        return "[No AI providers configured. Please check your API keys.]"
+    
+    total_tokens = 0
+    
     for provider in providers:
         try:
             logger.info(f"Trying provider: {provider}")
-            result = get_completion(provider, prompt)
-            logger.info(f"Provider {provider} result type: {type(result)}, value: {result[:100] if result else 'None'}")
-            if result and result.strip():
+            response = get_completion(provider, prompt)
+            
+            if response and response.get("text"):
+                result_text = response["text"]
+                total_tokens = response.get("tokens", 0)
+                
+                # Cache the result
                 if not no_cache:
-                    cache[normalized_prompt] = result
+                    cache[fingerprint] = response
                     with open(CACHE_FILE, 'w', encoding='utf-8') as f:
                         json.dump(cache, f)
-                return result
+                
+                logger.info(f"{provider} success - Tokens used: {total_tokens}")
+                return result_text
             else:
-                logger.warning(f"Provider {provider} returned empty result")
+                logger.warning(f"{provider} returned empty response")
+                
         except Exception as e:
-            logger.warning(f" {provider} failed: {e}")
+            logger.warning(f"{provider} failed: {e}")
     
-    logger.error("All providers failed, returning fallback")
-    return "Soft error: All providers failed"
+    logger.error("All providers failed")
+    return "[All AI providers failed. Please try again later or check your configuration.]"
