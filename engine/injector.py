@@ -8,16 +8,25 @@ Handles the main injection workflow:
 """
 
 import logging
+import os
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
+
+# Check for environment variables
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
+    logging.FileHandler("logs/injection.log"),
+    logging.StreamHandler()
+])
+logger = logging.getLogger(__name__)
+
 from typing import Optional
 from .prompty import build_prompt
 from .quality import is_response_weak, should_escalate, get_escalation_prompt
 from models.mistral_client import run_model
-from dotenv import load_dotenv
-load_dotenv()
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 def run_injection_from_files(source_path: str, prompt_path: str) -> str:
     """
@@ -86,12 +95,7 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
         
         # Step 2: Send to AI model
         logger.info("Sending to AI model...")
-        try:
-            modified_code = get_completion(provider, formatted_prompt)
-        except Exception as e:
-            logger.warning(f"⛔ {provider} failed, fallback triggered")
-            # Implement fallback logic here
-            modified_code = run_model(formatted_prompt)
+        modified_code = handle_injection(formatted_prompt)
         
         logger.info("AI model processing completed")
         
@@ -172,7 +176,7 @@ def backup_file(file_path: str) -> str:
 
 # Function to check for duplicate prompts
 def is_duplicate(prompt_hash):
-    # Check against stored hashes
+    # Use SQLite or JSON to track hashes
     return False
 
 # Function to auto-select provider
@@ -182,5 +186,32 @@ def auto_select_provider():
 
 # Function to get completion from provider
 def get_completion(provider, prompt):
-    # Implement provider logic
+    if provider == "anthropic":
+        if not ANTHROPIC_API_KEY:
+            logger.warning("🔑 Anthropic key missing — skipping to Groq")
+            raise Exception("Anthropic key missing")
+        # Implement Anthropic API call
+    elif provider == "groq-mixtral":
+        if not GROQ_API_KEY:
+            logger.warning("🔑 Groq Mixtral key missing — skipping to next")
+            raise Exception("Groq Mixtral key missing")
+        # Implement Groq Mixtral API call
+    elif provider == "groq-gemma":
+        # Implement Groq Gemma API call
+        pass
+    elif provider == "groq-llama":
+        # Implement Groq LLaMA API call
+        pass
+    else:
+        # Mock fallback
+        return "Mock response"
+
+# Function to handle injection with fallback
+def handle_injection(prompt):
+    providers = ["anthropic", "groq-mixtral", "groq-gemma", "groq-llama", "mock"]
+    for provider in providers:
+        try:
+            return get_completion(provider, prompt)
+        except Exception as e:
+            logger.warning(f"⚠️ {provider} failed, trying next provider...")
     return ""

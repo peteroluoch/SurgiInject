@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 from engine.injector import run_injection
 from engine.diff import show_diff
+from datetime import datetime
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -31,7 +32,7 @@ def cli():
 @click.option('--prompt', '-p', required=True, help='Prompt name or path to prompt template file')
 @click.option('--apply', '-a', is_flag=True, help='Apply changes to file (default: show diff only)')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
-@click.option('--provider', '-pr', default='auto', type=click.Choice(['anthropic', 'groq-mixtral', 'groq-gemma', 'auto']), help='Specify the provider to use')
+@click.option('--provider', '-pr', default='auto', type=click.Choice(['anthropic', 'groq-mixtral', 'groq-gemma', 'groq-llama', 'auto']), help='Specify the provider to use')
 @click.option('--force', is_flag=True, help='Force injection even if duplicate prompt is detected')
 def inject(file, prompt, apply, verbose, provider, force):
     """
@@ -77,7 +78,7 @@ def inject(file, prompt, apply, verbose, provider, force):
         # Check for duplicate prompt
         prompt_hash = hash(prompt_template)
         if not force and is_duplicate(prompt_hash):
-            click.echo("⚠️ Duplicate prompt detected. Skipping.")
+            click.echo("⚠️ Prompt already injected previously. Use --force to override.")
             return
 
         # Run AI injection
@@ -96,7 +97,7 @@ def inject(file, prompt, apply, verbose, provider, force):
             click.echo("\n💡 Use --apply to write these changes to the file")
 
         # Log injection details
-        logger.info(f"🔥 Injected: {provider} | ⏱ {len(source_code)} tokens | ✅ success")
+        logger.info(f"✅ Injected: {provider} | Tokens used: ~{len(source_code)} | Timestamp: {datetime.now()}")
 
     except KeyboardInterrupt:
         click.echo("\n⚠️  Operation cancelled by user")
@@ -107,7 +108,7 @@ def inject(file, prompt, apply, verbose, provider, force):
 
 # Function to check for duplicate prompts
 def is_duplicate(prompt_hash):
-    # Check against stored hashes
+    # Use SQLite or JSON to track hashes
     return False
 
 # Function to auto-select provider
