@@ -11,7 +11,15 @@ import logging
 import os
 import json
 from dotenv import load_dotenv, find_dotenv
+import requests
 load_dotenv(find_dotenv())
+
+# Configure logging first
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
+    logging.FileHandler("logs/injection.log"),
+    logging.StreamHandler()
+])
+logger = logging.getLogger(__name__)
 
 # Check for environment variables
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -23,13 +31,6 @@ if not ANTHROPIC_API_KEY:
 
 if not GROQ_API_KEY:
     logger.warning(" Groq API key not found. Groq provider will be skipped.")
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[
-    logging.FileHandler("logs/injection.log"),
-    logging.StreamHandler()
-])
-logger = logging.getLogger(__name__)
 
 from typing import Optional
 from .prompty import build_prompt
@@ -209,14 +210,34 @@ def get_completion(provider, prompt):
     if provider == "anthropic":
         if not ANTHROPIC_API_KEY:
             raise Exception("Anthropic key missing")
-        # Implement Anthropic API call
+        try:
+            response = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "claude-3-haiku-20240307",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 1024
+                },
+                timeout=15
+            )
+            response.raise_for_status()
+            return response.json()["content"][0]["text"]
+        except Exception as e:
+            logger.error(f"Anthropic API call failed: {e}")
+            raise
     elif provider == "groq":
         if not GROQ_API_KEY:
             raise Exception("Groq key missing")
-        # Implement Groq API call
+        # Implement Groq API call or fallback
+        return "[Groq API call not implemented in this function]"
     elif provider == "openai":
         # Implement OpenAI API call
-        pass
+        return "[OpenAI API call not implemented in this function]"
     else:
         # Mock fallback
         return "Mock response"

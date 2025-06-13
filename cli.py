@@ -86,7 +86,7 @@ def inject(file, prompt, apply, verbose, provider, force, encoding, debug, no_ca
         # Run AI injection
         if verbose:
             click.echo("🚀 Running AI injection...")
-        modified_code = run_injection(source_code, prompt_template, file_path=file, provider=provider, no_cache=no_cache, force_refresh=force_refresh)
+        modified_code = run_injection(source_code, prompt_template, file_path=file, provider=provider, force=force)
 
         # Output results
         if apply:
