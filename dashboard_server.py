@@ -282,55 +282,69 @@ class DashboardWebSocketServer:
     
     async def websocket_endpoint(self, websocket, path):
         """FastAPI-style WebSocket endpoint for persistent real-time logging"""
-        # Accept all connections regardless of path
         await self.register_client(websocket)
-        
         try:
-            # Keep connection alive and ready to send messages
             while True:
                 try:
-                    # Wait for messages with timeout
                     message = await asyncio.wait_for(websocket.recv(), timeout=30.0)
-                    data = json.loads(message)
-                    
+                    try:
+                        data = json.loads(message)
+                    except Exception as e:
+                        logger.error(f"Invalid JSON from client: {e} | Raw: {message}")
+                        continue
                     # Handle ping messages
                     if data.get("type") == "ping":
-                        await websocket.send(json.dumps({"type": "pong", "timestamp": datetime.now().isoformat()}))
-                        
+                        try:
+                            await websocket.send(json.dumps({"type": "pong", "timestamp": datetime.now().isoformat()}))
+                        except Exception as e:
+                            logger.error(f"Failed to send pong: {e}")
+                        continue
+                    # Log and ignore unknown message types
+                    logger.info(f"Received unknown message type: {data.get('type')} | Data: {data}")
                 except asyncio.TimeoutError:
-                    # Send ping to keep connection alive
                     try:
                         await websocket.ping()
-                    except:
+                    except Exception as e:
+                        logger.error(f"Ping failed, closing connection: {e}")
                         break
-                except json.JSONDecodeError:
-                    logger.warning("Received invalid JSON from client")
                 except websockets.exceptions.ConnectionClosed:
+                    logger.info("WebSocket connection closed by client.")
                     break
                 except Exception as e:
-                    logger.error(f"Error handling client message: {e}")
+                    logger.error(f"Error in websocket_endpoint loop: {e}")
                     break
-                    
-        except websockets.exceptions.ConnectionClosed:
-            pass
+        except Exception as e:
+            logger.error(f"websocket_endpoint outer error: {e}")
         finally:
             await self.unregister_client(websocket)
     
     async def start_server(self):
-        """Start the WebSocket server with FastAPI-style handler"""
+        """Start the WebSocket server with proper WebSocket upgrade handling"""
         logger.info(f"Starting WebSocket server on ws://{self.host}:{self.port}")
-        
-        # Create a wrapper function for the websockets library that accepts all paths
         async def handler(websocket, path):
-            # Accept all paths - no validation
-            await self.websocket_endpoint(websocket, path)
-        
-        # Start server with no path restrictions
-        server = await websockets.serve(handler, self.host, self.port)
-        logger.info("WebSocket server started successfully")
-        
-        # Keep server running
-        await server.wait_closed()
+            logger.info(f"WebSocket connection attempt from {getattr(websocket, 'remote_address', None)} on path: {path}")
+            try:
+                await self.websocket_endpoint(websocket, path)
+            except Exception as e:
+                logger.error(f"Error in WebSocket handler: {e}")
+                try:
+                    await websocket.close(1011, "Internal server error")
+                except Exception as close_e:
+                    logger.error(f"Error closing websocket: {close_e}")
+        try:
+            server = await websockets.serve(
+                handler,
+                self.host,
+                self.port,
+                ping_interval=20,
+                ping_timeout=10,
+                close_timeout=10
+            )
+            logger.info("WebSocket server started successfully")
+            await server.wait_closed()
+        except Exception as e:
+            logger.error(f"Failed to start WebSocket server: {e}")
+            raise
     
     def run(self):
         """Run the server"""
