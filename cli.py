@@ -12,6 +12,7 @@ from typing import List
 from engine.injector import run_injection
 from engine.recursive import inject_dir
 from engine.diff import show_diff
+from engine.backup_engine import create_backup, list_backups, restore_backup, restore_latest_backup, get_backup_stats
 from datetime import datetime
 import chardet
 
@@ -42,7 +43,8 @@ def cli():
 @click.option('--coordinated', is_flag=True, help='Use coordinated batch injection')
 @click.option('--provider', default='auto', help='AI provider to use')
 @click.option('--force', is_flag=True, help='Force injection even if file is already injected')
-def inject(file, prompt, apply, preview_only, with_context, coordinated, provider, force):
+@click.option('--no-backup', is_flag=True, help='Skip automatic backup creation')
+def inject(file, prompt, apply, preview_only, with_context, coordinated, provider, force, no_backup):
     """Inject AI-generated code into a file"""
     try:
         if preview_only:
@@ -142,6 +144,16 @@ def inject(file, prompt, apply, preview_only, with_context, coordinated, provide
             )
             
             if apply:
+                # Create backup before applying changes
+                if not no_backup:
+                    try:
+                        backup_path = create_backup(file)
+                        click.echo(f"🛡️  Backup created: {backup_path}")
+                    except Exception as e:
+                        click.echo(f"⚠️  Failed to create backup: {e}", err=True)
+                        if not click.confirm("Continue without backup?"):
+                            return 1
+                
                 # Write the result to file
                 with open(file, 'w', encoding='utf-8') as f:
                     f.write(result)
@@ -179,6 +191,16 @@ def inject(file, prompt, apply, preview_only, with_context, coordinated, provide
             )
             
             if apply:
+                # Create backup before applying changes
+                if not no_backup:
+                    try:
+                        backup_path = create_backup(file)
+                        click.echo(f"🛡️  Backup created: {backup_path}")
+                    except Exception as e:
+                        click.echo(f"⚠️  Failed to create backup: {e}", err=True)
+                        if not click.confirm("Continue without backup?"):
+                            return 1
+                
                 # Write the result to file
                 with open(file, 'w', encoding='utf-8') as f:
                     f.write(result)
@@ -197,6 +219,113 @@ def inject(file, prompt, apply, preview_only, with_context, coordinated, provide
         return 1
     except Exception as e:
         click.echo(f"❌ Injection failed: {e}", err=True)
+        return 1
+
+@cli.command()
+@click.option('--file', '-f', required=True, help='File to restore from backup')
+@click.option('--backup', '-b', help='Specific backup file to restore from (default: latest)')
+@click.option('--list', '-l', is_flag=True, help='List available backups for the file')
+@click.option('--force', is_flag=True, help='Force restore without confirmation')
+def undo(file, backup, list, force):
+    """Undo changes by restoring from backup"""
+    try:
+        file_path = Path(file)
+        if not file_path.exists():
+            click.echo(f"❌ File not found: {file}", err=True)
+            return 1
+        
+        if list:
+            # List available backups
+            backups = list_backups(file_path.name)
+            if not backups:
+                click.echo(f"❌ No backups found for {file_path.name}")
+                return 1
+            
+            click.echo(f"📁 Available backups for {file_path.name}:")
+            for i, backup_file in enumerate(backups, 1):
+                click.echo(f"  {i}. {backup_file}")
+            return 0
+        
+        if backup:
+            # Restore from specific backup
+            if not force and not click.confirm(f"Restore {file} from backup {backup}?"):
+                click.echo("Restore cancelled.")
+                return 0
+            
+            success = restore_backup(file, backup)
+            if success:
+                click.echo(f"✅ File restored from {backup}")
+            else:
+                click.echo(f"❌ Failed to restore from {backup}", err=True)
+                return 1
+        else:
+            # Restore from latest backup
+            if not force and not click.confirm(f"Restore {file} from latest backup?"):
+                click.echo("Restore cancelled.")
+                return 0
+            
+            success = restore_latest_backup(file)
+            if success:
+                click.echo(f"✅ File restored from latest backup")
+            else:
+                click.echo(f"❌ Failed to restore from latest backup", err=True)
+                return 1
+        
+        return 0
+        
+    except Exception as e:
+        click.echo(f"❌ Undo failed: {e}", err=True)
+        return 1
+
+@cli.command()
+@click.option('--stats', '-s', is_flag=True, help='Show backup statistics')
+@click.option('--cleanup', '-c', is_flag=True, help='Clean up old backups (keep 5 most recent)')
+@click.option('--file', '-f', help='Clean up backups for specific file')
+def backups(stats, cleanup, file):
+    """Manage backup files"""
+    try:
+        if stats:
+            # Show backup statistics
+            stats_data = get_backup_stats()
+            click.echo("📊 Backup Statistics:")
+            click.echo(f"  Total backups: {stats_data['total_backups']}")
+            click.echo(f"  Total size: {stats_data['total_size']} bytes")
+            click.echo(f"  Files with backups: {stats_data['files_with_backups']}")
+            if stats_data['oldest_backup']:
+                click.echo(f"  Oldest backup: {stats_data['oldest_backup']}")
+            if stats_data['newest_backup']:
+                click.echo(f"  Newest backup: {stats_data['newest_backup']}")
+            
+            if stats_data['backup_files']:
+                click.echo(f"  Files with backups: {', '.join(stats_data['backup_files'])}")
+        
+        elif cleanup:
+            if file:
+                # Clean up backups for specific file
+                from engine.backup_engine import cleanup_old_backups
+                deleted_count = cleanup_old_backups(Path(file).name, keep_count=5)
+                click.echo(f"🧹 Cleaned up {deleted_count} old backups for {file}")
+            else:
+                # Clean up all backups
+                from engine.backup_engine import cleanup_old_backups
+                total_deleted = 0
+                stats_data = get_backup_stats()
+                for backup_file in stats_data.get('backup_files', []):
+                    deleted_count = cleanup_old_backups(backup_file, keep_count=5)
+                    total_deleted += deleted_count
+                click.echo(f"🧹 Cleaned up {total_deleted} old backups total")
+        
+        else:
+            # Show help
+            click.echo("Backup management commands:")
+            click.echo("  --stats: Show backup statistics")
+            click.echo("  --cleanup: Clean up old backups")
+            click.echo("  --file <filename> --cleanup: Clean up backups for specific file")
+        
+        return 0
+        
+    except Exception as e:
+        click.echo(f"❌ Backup management failed: {e}", err=True)
         return 1
 
 @cli.command()

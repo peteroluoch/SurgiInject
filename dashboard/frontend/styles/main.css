@@ -71,6 +71,19 @@ body {
     border: 1px solid rgba(248, 81, 73, 0.3);
 }
 
+.backup-status {
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(56, 139, 253, 0.2);
+    color: #79c0ff;
+    border: 1px solid rgba(56, 139, 253, 0.3);
+}
+
 .dashboard-main {
     flex: 1;
     padding: 2rem;
@@ -139,6 +152,40 @@ body {
     transform: translateY(0);
 }
 
+.undo-btn {
+    background: linear-gradient(135deg, #da3633 0%, #f85149 100%);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 2px 8px rgba(248, 81, 73, 0.3);
+}
+
+.undo-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #f85149 0%, #ff7b72 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(248, 81, 73, 0.4);
+}
+
+.undo-btn:disabled {
+    background: #484f58;
+    color: #8b949e;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.undo-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
 .preview-panel {
     background: #161b22;
     border: 1px solid #30363d;
@@ -203,7 +250,8 @@ body {
         flex-direction: column;
     }
 
-    .preview-btn {
+    .preview-btn,
+    .undo-btn {
         width: 100%;
         justify-content: center;
     }
@@ -263,6 +311,10 @@ select:focus-visible {
 
     .preview-btn {
         border: 2px solid #238636;
+    }
+
+    .undo-btn {
+        border: 2px solid #da3633;
     }
 }
 

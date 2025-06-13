@@ -328,10 +328,12 @@
             const [isLoading, setIsLoading] = useState(false);
             const [error, setError] = useState(null);
             const [wsConnected, setWsConnected] = useState(false);
+            const [backupStats, setBackupStats] = useState(null);
             const wsRef = useRef(null);
 
             useEffect(() => {
                 connectWebSocket();
+                loadBackupStats();
                 return () => {
                     if (wsRef.current) {
                         wsRef.current.close();
@@ -361,12 +363,66 @@
                 };
             };
 
+            const loadBackupStats = async () => {
+                try {
+                    const response = await fetch('/api/undo/backup-stats');
+                    if (response.ok) {
+                        const stats = await response.json();
+                        setBackupStats(stats);
+                    }
+                } catch (error) {
+                    console.error('Failed to load backup stats:', error);
+                }
+            };
+
             const handleFileSelect = (filePath) => {
                 setSelectedFile(filePath);
             };
 
             const handlePromptSelect = (promptPath) => {
                 setSelectedPrompt(promptPath);
+            };
+
+            const handleUndo = async () => {
+                if (!selectedFile) {
+                    setError('Please select a file to undo.');
+                    return;
+                }
+
+                if (!confirm(`Are you sure you want to undo changes to ${selectedFile}?`)) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/undo/undo', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            file_path: selectedFile
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    alert(`✅ ${result.message}`);
+                    
+                    // Refresh backup stats
+                    loadBackupStats();
+                    
+                    // Clear preview if it was for the same file
+                    if (preview && preview.filepath === selectedFile) {
+                        setPreview(null);
+                    }
+
+                } catch (error) {
+                    console.error('Undo failed:', error);
+                    setError(`Failed to undo: ${error.message}`);
+                }
             };
 
             const generatePreview = async () => {
@@ -437,6 +493,9 @@
                         alert(`✅ Successfully applied changes to ${result.filename}`);
                         setPreview(null);
                         
+                        // Refresh backup stats
+                        loadBackupStats();
+                        
                         // Send WebSocket notification
                         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                             wsRef.current.send(JSON.stringify({
@@ -471,6 +530,11 @@
                             <span className={`ws-status ${wsConnected ? 'connected' : 'disconnected'}`}>
                                 {wsConnected ? '🔗 Connected' : '🔌 Disconnected'}
                             </span>
+                            {backupStats && (
+                                <span className="backup-status">
+                                    🛡️ {backupStats.total_backups} backups
+                                </span>
+                            )}
                         </div>
                     </header>
 
@@ -490,6 +554,14 @@
                                     className="preview-btn"
                                 >
                                     {isLoading ? '🔄 Generating Preview...' : '🔍 Generate Preview'}
+                                </button>
+                                
+                                <button
+                                    onClick={handleUndo}
+                                    disabled={!selectedFile}
+                                    className="undo-btn"
+                                >
+                                    🧨 Undo Last Change
                                 </button>
                             </div>
 

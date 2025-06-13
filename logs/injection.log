@@ -76,3 +76,5 @@
 2025-06-13 23:22:01,222 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
 2025-06-13 23:22:01,223 - WARNING -  Groq API key not found. Groq provider will be skipped.
 2025-06-13 23:22:01,387 - INFO - File restored from backup: test_undo.py <- test_undo.py.20250613_232145.bak
+2025-06-13 23:30:59,017 - WARNING -  Anthropic API key not found. Anthropic provider will be skipped.
+2025-06-13 23:30:59,018 - WARNING -  Groq API key not found. Groq provider will be skipped.

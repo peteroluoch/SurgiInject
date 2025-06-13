@@ -9,6 +9,7 @@ from pathlib import Path
 # Import the new API routers
 from api.preview import router as preview_router
 from api.apply import router as apply_router
+from api.undo import router as undo_router
 
 app = FastAPI(title="SurgiInject Dashboard", version="1.0.0")
 
@@ -19,6 +20,7 @@ FRONTEND_DIR = SERVER_DIR / "frontend"
 # Add the new API routes
 app.include_router(preview_router, prefix="/api/preview", tags=["preview"])
 app.include_router(apply_router, prefix="/api/apply", tags=["apply"])
+app.include_router(undo_router, prefix="/api/undo", tags=["undo"])
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
