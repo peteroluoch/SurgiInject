@@ -13,6 +13,9 @@ from threading import Thread
 import os
 from datetime import datetime
 from urllib.parse import urlparse, parse_qs
+import subprocess
+import signal
+import sys
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -321,6 +324,7 @@ class DashboardWebSocketServer:
     async def start_server(self):
         """Start the WebSocket server with proper WebSocket upgrade handling"""
         logger.info(f"Starting WebSocket server on ws://{self.host}:{self.port}")
+        
         async def handler(websocket, path):
             logger.info(f"WebSocket connection attempt from {getattr(websocket, 'remote_address', None)} on path: {path}")
             try:
@@ -331,17 +335,28 @@ class DashboardWebSocketServer:
                     await websocket.close(1011, "Internal server error")
                 except Exception as close_e:
                     logger.error(f"Error closing websocket: {close_e}")
+        
         try:
+            # Try to start server with port reuse
             server = await websockets.serve(
                 handler,
                 self.host,
                 self.port,
                 ping_interval=20,
                 ping_timeout=10,
-                close_timeout=10
+                close_timeout=10,
+                reuse_address=True,
+                reuse_port=True
             )
             logger.info("WebSocket server started successfully")
             await server.wait_closed()
+        except OSError as e:
+            if "Address already in use" in str(e) or "10048" in str(e):
+                logger.error(f"Port {self.port} is already in use. Please stop any existing server first.")
+                logger.info("Try: netstat -ano | findstr :8766  # to find process using port 8766")
+            else:
+                logger.error(f"Failed to start WebSocket server: {e}")
+            raise
         except Exception as e:
             logger.error(f"Failed to start WebSocket server: {e}")
             raise
@@ -379,8 +394,35 @@ class DashboardHTTPServer:
         http_thread.start()
         return http_thread
 
+def kill_process_on_port(port):
+    """Kill process using the specified port (Windows)"""
+    try:
+        # Find process using the port
+        result = subprocess.run(['netstat', '-ano'], capture_output=True, text=True)
+        lines = result.stdout.split('\n')
+        
+        for line in lines:
+            if f':{port}' in line and 'LISTENING' in line:
+                parts = line.split()
+                if len(parts) >= 5:
+                    pid = parts[-1]
+                    try:
+                        subprocess.run(['taskkill', '/PID', pid, '/F'], check=True)
+                        logger.info(f"Killed process {pid} using port {port}")
+                        return True
+                    except subprocess.CalledProcessError:
+                        logger.warning(f"Failed to kill process {pid}")
+        return False
+    except Exception as e:
+        logger.error(f"Error killing process on port {port}: {e}")
+        return False
+
 def main():
     """Main function to start both servers"""
+    # Check and kill any existing process on WebSocket port
+    if kill_process_on_port(8766):
+        logger.info("Cleared port 8766 for WebSocket server")
+    
     # Start HTTP server
     http_server = DashboardHTTPServer()
     http_thread = http_server.start()
@@ -392,7 +434,13 @@ def main():
     from inject_logger import injection_logger
     injection_logger.set_broadcast_callback(ws_server.broadcast_event)
     
-    ws_server.run()
+    try:
+        ws_server.run()
+    except KeyboardInterrupt:
+        logger.info("Shutting down servers...")
+    except Exception as e:
+        logger.error(f"Server error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main() 
