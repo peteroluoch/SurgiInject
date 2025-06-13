@@ -313,6 +313,9 @@
                 this.ws.onopen = () => {
                     this.updateConnectionStatus('Connected', 'connected');
                     console.log('WebSocket connected');
+                    
+                    // Send initial ping to establish connection
+                    this.ws.send(JSON.stringify({type: 'ping'}));
                 };
 
                 this.ws.onmessage = (event) => {
@@ -320,17 +323,36 @@
                     this.handleMessage(data);
                 };
 
-                this.ws.onclose = () => {
+                this.ws.onclose = (event) => {
                     this.updateConnectionStatus('Disconnected', 'disconnected');
-                    console.log('WebSocket disconnected');
-                    // Reconnect after 5 seconds
-                    setTimeout(() => this.connectWebSocket(), 5000);
+                    console.log('WebSocket disconnected', event.code, event.reason);
+                    
+                    // Clear ping interval
+                    if (this.pingInterval) {
+                        clearInterval(this.pingInterval);
+                        this.pingInterval = null;
+                    }
+                    
+                    // Reconnect after 3 seconds if not a normal closure
+                    if (event.code !== 1000) {
+                        setTimeout(() => {
+                            console.log('Attempting to reconnect...');
+                            this.connectWebSocket();
+                        }, 3000);
+                    }
                 };
 
                 this.ws.onerror = (error) => {
                     console.error('WebSocket error:', error);
                     this.updateConnectionStatus('Error', 'disconnected');
                 };
+                
+                // Set up ping interval to keep connection alive
+                this.pingInterval = setInterval(() => {
+                    if (this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({type: 'ping'}));
+                    }
+                }, 25000); // Send ping every 25 seconds
             }
 
             handleMessage(data) {

@@ -37,6 +37,7 @@ from typing import Optional, Dict, Any
 from .prompty import build_prompt
 from .quality import is_response_weak, should_escalate, get_escalation_prompt
 from models.mistral_client import run_model
+from inject_logger import injection_logger
 
 # Load cache from file if exists
 CACHE_FILE = "surgi_cache.json"
@@ -97,13 +98,27 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
     try:
         logger.info("Starting injection process...")
         
+        # Emit start event
+        injection_logger.emit_start(
+            prompt_file=prompt_template[:50] + "..." if len(prompt_template) > 50 else prompt_template,
+            target_file=file_path or "unknown_file",
+            provider=provider,
+            cached=False
+        )
+        
         # Check for duplicate prompt using fingerprint
         fingerprint = compute_fingerprint(source_code, prompt_template)
         if not force and fingerprint in cache:
             logger.warning("Duplicate prompt detected - using cached result")
             cached_result = cache[fingerprint]
             if isinstance(cached_result, dict):
-                return cached_result.get("text", source_code)
+                result = cached_result.get("text", source_code)
+                # Emit cache hit event
+                injection_logger.emit_cache_hit(
+                    target_file=file_path or "unknown_file",
+                    provider=provider
+                )
+                return result
             return cached_result
         
         # Step 1: Build formatted prompt
@@ -139,6 +154,12 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
                 if escalated_response and escalated_response.strip():
                     modified_code = escalated_response
                     logger.info("Escalation completed successfully")
+                    # Emit escalation event
+                    injection_logger.emit_escalation(
+                        target_file=file_path or "unknown_file",
+                        provider=provider,
+                        escalation_provider="escalation_model"
+                    )
                 else:
                     logger.warning("Escalation returned empty response, keeping original")
             except Exception as e:
@@ -151,10 +172,27 @@ def run_injection(source_code: str, prompt_template: str, file_path: Optional[st
             return source_code
             
         logger.info("Injection process completed successfully")
+        
+        # Emit success event
+        injection_logger.emit_success(
+            target_file=file_path or "unknown_file",
+            provider=provider,
+            tokens=len(modified_code.split()),  # Approximate token count
+            result_preview=modified_code[:100] + "..." if len(modified_code) > 100 else modified_code
+        )
+        
         return modified_code
         
     except Exception as e:
         logger.error(f"Injection process failed: {e}")
+        
+        # Emit error event
+        injection_logger.emit_error(
+            target_file=file_path or "unknown_file",
+            provider=provider,
+            error=str(e)
+        )
+        
         return f"[Injection failed: {str(e)}. Please try again later.]"
 
 def validate_code_structure(original: str, modified: str) -> bool:
@@ -346,6 +384,14 @@ def handle_injection(prompt: str, file_content: str = "", no_cache: bool = False
                 
         except Exception as e:
             logger.warning(f"{provider} failed: {e}")
+            # Emit fallback event if this wasn't the last provider
+            if provider != providers[-1]:
+                next_provider = providers[providers.index(provider) + 1]
+                injection_logger.emit_fallback(
+                    target_file="unknown_file",
+                    failed_provider=provider,
+                    fallback_provider=next_provider
+                )
     
     logger.error("All providers failed")
     return "[All AI providers failed. Please try again later or check your configuration.]"

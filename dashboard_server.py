@@ -75,19 +75,31 @@ class DashboardWebSocketServer:
         for client in disconnected_clients:
             await self.unregister_client(client)
     
-    async def handle_client(self, websocket: WebSocketServerProtocol):
+    async def handle_client(self, websocket: WebSocketServerProtocol, path: str):
         """Handle WebSocket client connection"""
         await self.register_client(websocket)
         
         try:
-            async for message in websocket:
+            # Keep connection alive with heartbeat
+            while True:
                 try:
+                    # Wait for messages with timeout
+                    message = await asyncio.wait_for(websocket.recv(), timeout=30.0)
                     data = json.loads(message)
                     await self.handle_message(websocket, data)
+                except asyncio.TimeoutError:
+                    # Send ping to keep connection alive
+                    try:
+                        await websocket.ping()
+                    except:
+                        break
                 except json.JSONDecodeError:
                     logger.warning("Received invalid JSON from client")
+                except websockets.exceptions.ConnectionClosed:
+                    break
                 except Exception as e:
                     logger.error(f"Error handling client message: {e}")
+                    break
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
@@ -131,7 +143,7 @@ class DashboardWebSocketServer:
         
         # Create a wrapper function for the websockets library
         async def handler(websocket, path):
-            await self.handle_client(websocket)
+            await self.handle_client(websocket, path)
         
         async with websockets.serve(handler, self.host, self.port):
             logger.info("WebSocket server started successfully")

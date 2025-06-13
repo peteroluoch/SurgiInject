@@ -22,11 +22,11 @@
 1. Get your key from https://console.groq.com
 2. Add to `.env` file:
    ```
-   GROQ_API_KEY=sk-...
+   GROQ_API_KEY=sk-your-groq-api-key-here
    ```
 3. Or export in your terminal:
    ```bash
-   export GROQ_API_KEY=sk-...
+   export GROQ_API_KEY=sk-your-groq-api-key-here
    ```
 
 ## Quick Start
